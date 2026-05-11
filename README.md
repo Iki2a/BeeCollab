@@ -583,59 +583,32 @@ npm run test:e2e
 Menjalankan test coverage:
 
 ```bash
-npm run test:cov
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
----
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Roadmap
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-### MVP
-- [ ] Register dan login user
-- [ ] JWT authentication
-- [ ] Create meeting
-- [ ] Join meeting
-- [ ] Leave meeting
-- [ ] End meeting
-- [ ] WebSocket gateway
-- [ ] WebRTC signaling
-- [ ] Chat real-time
-- [ ] Participant list
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-### Next Development
-- [ ] Schedule meeting
-- [ ] Waiting room
-- [ ] Meeting password
-- [ ] Host approval sebelum join
-- [ ] Screen sharing signaling
-- [ ] Recording metadata
-- [ ] Email invitation
-- [ ] Redis adapter untuk scaling WebSocket
-- [ ] SFU integration untuk meeting skala besar
-- [ ] Admin dashboard
+## Learn More
 
----
+To learn more about Next.js, take a look at the following resources:
 
-## Security Notes
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-- Password harus disimpan dalam bentuk hash.
-- JWT secret tidak boleh di-commit ke repository.
-- Endpoint meeting harus dilindungi guard.
-- WebSocket handshake harus memvalidasi token.
-- Host-only action seperti end meeting dan kick participant harus divalidasi role-nya.
-- Rate limiting perlu ditambahkan untuk endpoint login dan WebSocket event tertentu.
-- CORS harus dibatasi sesuai domain frontend.
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
----
+## Deploy on Vercel
 
-## Author
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-**2802484110 - Reiki Indrasyahdewa Kierana**
-
-Project: **BeeCollab - Live Meeting Backend**
-
----
-
-## Kesimpulan
-
-BeeCollab Backend adalah fondasi untuk aplikasi live meeting berbasis NestJS. Backend ini menangani authentication, meeting room, participant management, chat, dan WebRTC signaling. Dengan arsitektur modular, project ini dapat dikembangkan dari MVP sederhana menjadi aplikasi meeting yang lebih scalable dan production-ready.
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
