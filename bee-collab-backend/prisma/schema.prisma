@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+enum ParticipantRole {
+  HOST
+  CO_HOST
+  PARTICIPANT
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  meetings     Meeting[]     @relation("HostRelation")
+  participants Participant[]
+  messages     ChatMessage[]
+}
+
+model Meeting {
+  id              String        @id @default(uuid())
+  title           String
+  roomCode        String        @unique
+  hostId          String
+  host            User          @relation("HostRelation", fields: [hostId], references: [id])
+  status          MeetingStatus @default(SCHEDULED)
+  maxParticipants Int           @default(50)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime      @default(now())
+  participants    Participant[]
+  messages        ChatMessage[]
+}
+
+model Participant {
+  id           String          @id @default(uuid())
+  meetingId    String
+  meeting      Meeting         @relation(fields: [meetingId], references: [id])
+  userId       String
+  user         User            @relation(fields: [userId], references: [id])
+  socketId     String? // Updated on WS connection
+  role         ParticipantRole @default(PARTICIPANT)
+  audioEnabled Boolean         @default(true)
+  videoEnabled Boolean         @default(true)
+  joinedAt     DateTime        @default(now())
+  leftAt       DateTime?
+
+  @@unique([meetingId, userId])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  meetingId String
+  meeting   Meeting     @relation(fields: [meetingId], references: [id])
+  senderId  String
+  sender    User        @relation(fields: [senderId], references: [id])
+  message   String      @db.Text
+  type      MessageType @default(TEXT)
+  createdAt DateTime    @default(now())
+}
