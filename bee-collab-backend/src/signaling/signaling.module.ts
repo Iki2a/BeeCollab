@@ -7,5 +7,6 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [AuthModule, ChatModule],
   providers: [SignalingGateway, SignalingService],
+  exports: [SignalingGateway],
 })
 export class SignalingModule {}

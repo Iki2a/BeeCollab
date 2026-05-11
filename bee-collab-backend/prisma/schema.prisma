@@ -47,6 +47,7 @@ model Meeting {
   host            User          @relation("HostRelation", fields: [hostId], references: [id])
   status          MeetingStatus @default(SCHEDULED)
   maxParticipants Int           @default(50)
+  duration        Int           @default(60) // in minutes
   startedAt       DateTime?
   endedAt         DateTime?
   createdAt       DateTime      @default(now())

@@ -74,6 +74,14 @@ export class SignalingGateway
     private readonly chatService: ChatService,
   ) {}
 
+  emitMeetingEnded(meetingId: string, reason?: string) {
+    if (!this.server) return;
+
+    this.server
+      .to(meetingId)
+      .emit('meeting:ended', { meetingId, reason });
+  }
+
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
   handleConnection(client: Socket) {
@@ -113,6 +121,15 @@ export class SignalingGateway
     @MessageBody() payload: JoinPayload,
   ) {
     const user = getUser(client);
+
+    // Disconnect any existing tabs/sockets for the same user in this meeting
+    const existingSockets = await this.server.in(payload.meetingId).fetchSockets();
+    for (const socket of existingSockets) {
+      if ((socket.data as SocketData).user?.sub === user.sub && socket.id !== client.id) {
+        socket.emit('error', { message: 'Membuka dari tab lain. Koneksi ini ditutup.' });
+        socket.disconnect();
+      }
+    }
 
     const participant = await this.signalingService.handleJoin(
       payload.meetingId,

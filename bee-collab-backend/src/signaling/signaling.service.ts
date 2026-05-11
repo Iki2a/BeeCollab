@@ -81,9 +81,11 @@ export class SignalingService {
     });
     if (!meeting || meeting.hostId !== userId) return null;
 
-    return this.prisma.meeting.update({
+    await this.prisma.participant.deleteMany({ where: { meetingId } });
+    await this.prisma.chatMessage.deleteMany({ where: { meetingId } });
+
+    return this.prisma.meeting.delete({
       where: { id: meetingId },
-      data: { status: MeetingStatus.ENDED, endedAt: new Date() },
     });
   }
 }

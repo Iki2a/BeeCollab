@@ -26,7 +26,8 @@ export class MeetingsService {
         title: dto.title,
         roomCode,
         hostId,
-        maxParticipants: dto.maxParticipants ?? 50,
+        maxParticipants: dto.maxParticipants ?? 10,
+        duration: dto.duration ?? 15,
         status: MeetingStatus.SCHEDULED,
         participants: {
           create: {
@@ -93,9 +94,11 @@ export class MeetingsService {
     if (meeting.hostId !== hostId)
       throw new ForbiddenException('Only the host can end the meeting');
 
-    return this.prisma.meeting.update({
+    await this.prisma.participant.deleteMany({ where: { meetingId } });
+    await this.prisma.chatMessage.deleteMany({ where: { meetingId } });
+
+    return this.prisma.meeting.delete({
       where: { id: meetingId },
-      data: { status: MeetingStatus.ENDED, endedAt: new Date() },
     });
   }
 

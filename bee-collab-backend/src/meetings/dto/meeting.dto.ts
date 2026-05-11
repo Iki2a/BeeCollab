@@ -17,6 +17,12 @@ export class CreateMeetingDto {
   @Min(2)
   @Max(500)
   maxParticipants?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  duration?: number;
 }
 
 export class JoinMeetingDto {

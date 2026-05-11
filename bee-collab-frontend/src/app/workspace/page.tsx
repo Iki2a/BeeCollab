@@ -21,7 +21,7 @@ export default function Workspace() {
   const [user, setUser] = useState<User | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newMeetingTitle, setNewMeetingTitle] = useState('');
+  const [newMeetingForm, setNewMeetingForm] = useState({ title: '', duration: 60, maxParticipants: 50 });
   const [joinMeetingId, setJoinMeetingId] = useState('');
 
   useEffect(() => {
@@ -41,6 +41,7 @@ export default function Workspace() {
           const userData = await userRes.json();
           setUser(userData);
         } else {
+          localStorage.removeItem('token');
           router.push('/login');
           return;
         }
@@ -64,7 +65,7 @@ export default function Workspace() {
   }, [router]);
 
   const handleCreateMeeting = async () => {
-    if (!newMeetingTitle) return;
+    if (!newMeetingForm.title) return;
     const token = localStorage.getItem('token');
     
     try {
@@ -74,13 +75,17 @@ export default function Workspace() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}` 
         },
-        body: JSON.stringify({ title: newMeetingTitle })
+        body: JSON.stringify({ 
+          title: newMeetingForm.title,
+          duration: Number(newMeetingForm.duration),
+          maxParticipants: Number(newMeetingForm.maxParticipants)
+        })
       });
       
       if (res.ok) {
         const data = await res.json();
         // Redirect to the meeting room
-        router.push(`/meeting?id=${data.id}`);
+        router.push(`/meeting/${data.id}`);
       }
     } catch (err) {
       console.error(err);
@@ -90,7 +95,7 @@ export default function Workspace() {
   const handleJoinMeeting = (e: React.FormEvent) => {
     e.preventDefault();
     if (joinMeetingId) {
-      router.push(`/meeting?id=${joinMeetingId}`);
+      router.push(`/meeting/${joinMeetingId}`);
     }
   };
 
@@ -120,11 +125,45 @@ export default function Workspace() {
           <input 
             type="text" 
             placeholder="Meeting Title (e.g. Daily Sync)"
-            value={newMeetingTitle}
-            onChange={(e) => setNewMeetingTitle(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.2)', color: 'white', marginBottom: '1rem' }} 
+            value={newMeetingForm.title}
+            onChange={(e) => setNewMeetingForm({...newMeetingForm, title: e.target.value})}
+            disabled={meetings.length > 0}
+            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.2)', color: 'white', marginBottom: '1rem', opacity: meetings.length > 0 ? 0.5 : 1 }} 
           />
-          <button className="btn-primary" onClick={handleCreateMeeting} style={{ width: '100%' }}>Create & Join</button>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Duration (mins)</label>
+              <input 
+                type="number" 
+                value={newMeetingForm.duration}
+                onChange={(e) => setNewMeetingForm({...newMeetingForm, duration: parseInt(e.target.value)})}
+                disabled={meetings.length > 0}
+                min="1"
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.2)', color: 'white', opacity: meetings.length > 0 ? 0.5 : 1 }} 
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Max Participants</label>
+              <input 
+                type="number" 
+                value={newMeetingForm.maxParticipants}
+                onChange={(e) => setNewMeetingForm({...newMeetingForm, maxParticipants: parseInt(e.target.value)})}
+                disabled={meetings.length > 0}
+                min="2"
+                max="500"
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.2)', color: 'white', opacity: meetings.length > 0 ? 0.5 : 1 }} 
+              />
+            </div>
+          </div>
+          <button 
+            className="btn-primary" 
+            onClick={handleCreateMeeting} 
+            disabled={meetings.length > 0}
+            style={{ width: '100%', opacity: meetings.length > 0 ? 0.5 : 1, cursor: meetings.length > 0 ? 'not-allowed' : 'pointer' }}
+            title={meetings.length > 0 ? "Akhiri meeting sebelumnya untuk membuat meeting baru." : ""}
+          >
+            {meetings.length > 0 ? 'Meeting Sedang Aktif' : 'Create & Join'}
+          </button>
         </div>
         
         <div className="glass-panel">
@@ -154,7 +193,7 @@ export default function Workspace() {
                 <h4 style={{ margin: 0, fontSize: '1.125rem' }}>{m.title}</h4>
                 <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0.25rem 0 0 0' }}>ID: {m.id} | Status: {m.status}</p>
               </div>
-              <button className="btn-primary" onClick={() => router.push(`/meeting?id=${m.id}`)}>Re-join</button>
+              <button className="btn-primary" onClick={() => router.push(`/meeting/${m.id}`)}>Re-join</button>
             </div>
           ))}
         </div>
