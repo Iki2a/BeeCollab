@@ -20,7 +20,7 @@ interface AuthRequest extends Request {
 @UseGuards(JwtAuthGuard)
 @Controller('meetings')
 export class MeetingsController {
-  constructor(private readonly meetingsService: MeetingsService) {}
+  constructor(private readonly meetingsService: MeetingsService) { }
 
   /** POST /meetings — Create a new meeting */
   @Post()
@@ -38,6 +38,12 @@ export class MeetingsController {
   @Get(':meetingId')
   findOne(@Param('meetingId') meetingId: string) {
     return this.meetingsService.getMeetingById(meetingId);
+  }
+
+  /** GET /meetings/code/:roomCode */
+  @Get('code/:roomCode')
+  findByRoomCode(@Param('roomCode') roomCode: string) {
+    return this.meetingsService.getMeetingByRoomCode(roomCode);
   }
 
   /** POST /meetings/:meetingId/join */

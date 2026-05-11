@@ -28,6 +28,8 @@ function getUser(client: Socket): WsUser {
 
 interface JoinPayload {
   meetingId: string;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
 }
 
 interface WebRtcPayload {
@@ -52,9 +54,29 @@ interface EndMeetingPayload {
   meetingId: string;
 }
 
+interface HandTogglePayload {
+  meetingId: string;
+  raised: boolean;
+}
+
 interface KickPayload {
   meetingId: string;
   targetSocketId: string;
+}
+
+interface AskUnmutePayload {
+  meetingId: string;
+  targetSocketId: string;
+}
+
+interface MakeCoHostPayload {
+  meetingId: string;
+  targetUserId: string;
+}
+
+interface RemoveCoHostPayload {
+  meetingId: string;
+  targetUserId: string;
 }
 
 // ─── Gateway ──────────────────────────────────────────────────────────────────
@@ -64,15 +86,14 @@ interface KickPayload {
   cors: { origin: '*' },
 })
 export class SignalingGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
   constructor(
     private readonly signalingService: SignalingService,
     private readonly chatService: ChatService,
-  ) {}
+  ) { }
 
   emitMeetingEnded(meetingId: string, reason?: string) {
     if (!this.server) return;
@@ -135,6 +156,8 @@ export class SignalingGateway
       payload.meetingId,
       user.sub,
       client.id,
+      payload.audioEnabled,
+      payload.videoEnabled,
     );
 
     await client.join(payload.meetingId);
@@ -143,9 +166,19 @@ export class SignalingGateway
       socketId: client.id,
       userId: user.sub,
       user: participant.user,
+      role: participant.role,
       audioEnabled: participant.audioEnabled,
       videoEnabled: participant.videoEnabled,
     });
+
+    client.data.profile = {
+      id: participant.user.id,
+      name: participant.user.name,
+      avatarUrl: participant.user.avatarUrl,
+    };
+    client.data.audioEnabled = participant.audioEnabled;
+    client.data.videoEnabled = participant.videoEnabled;
+    client.data.role = participant.role;
 
     const sockets = await this.server.in(payload.meetingId).fetchSockets();
     client.emit('meeting:state', {
@@ -153,6 +186,10 @@ export class SignalingGateway
       participants: sockets.map((s) => ({
         socketId: s.id,
         userId: (s.data as SocketData).user?.sub,
+        user: (s.data as SocketData).profile,
+        role: (s.data as SocketData).role,
+        audioEnabled: (s.data as SocketData).audioEnabled,
+        videoEnabled: (s.data as SocketData).videoEnabled,
       })),
     });
   }
@@ -193,12 +230,29 @@ export class SignalingGateway
       payload.enabled,
     );
 
+    if (payload.type === 'audio') {
+      client.data.audioEnabled = payload.enabled;
+    } else {
+      client.data.videoEnabled = payload.enabled;
+    }
+
     this.server.to(payload.meetingId).emit('media:updated', {
       socketId: client.id,
       userId: user.sub,
       user: updated.user,
       type: payload.type,
       enabled: payload.enabled,
+    });
+  }
+
+  @SubscribeMessage('media:speaking')
+  onMediaSpeaking(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; speaking: boolean },
+  ) {
+    client.to(payload.meetingId).emit('media:speaking', {
+      socketId: client.id,
+      speaking: payload.speaking,
     });
   }
 
@@ -243,6 +297,22 @@ export class SignalingGateway
       .emit('meeting:ended', { meetingId: payload.meetingId });
   }
 
+  // ── Hand raise ──────────────────────────────────────────────────────────────
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('hand:toggle')
+  onHandToggle(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: HandTogglePayload,
+  ) {
+    const user = getUser(client);
+
+    this.server.to(payload.meetingId).emit('hand:updated', {
+      userId: user.sub,
+      raised: payload.raised,
+    });
+  }
+
   // ── Kick participant (HOST only) ──────────────────────────────────────────────
 
   @UseGuards(WsJwtGuard)
@@ -252,18 +322,167 @@ export class SignalingGateway
     @MessageBody() payload: KickPayload,
   ) {
     const user = getUser(client);
-    const meeting = await this.signalingService.endMeeting(
-      payload.meetingId,
-      user.sub,
-    );
-
-    if (!meeting) {
-      client.emit('error', { message: 'Only HOST can kick participants' });
+    const canKick = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canKick) {
+      client.emit('error', { message: 'Only host/co-host can kick participants' });
       return;
     }
 
-    this.server
-      .to(payload.targetSocketId)
-      .emit('meeting:kicked', { reason: 'Removed by host' });
+    const target = await this.signalingService.getParticipantBySocketId(
+      payload.meetingId,
+      payload.targetSocketId,
+    );
+    if (!target) {
+      client.emit('error', { message: 'Participant not found' });
+      return;
+    }
+    const isTargetHost = await this.signalingService.isHost(payload.meetingId, target.userId);
+    if (isTargetHost) {
+      client.emit('error', { message: 'Host cannot be kicked' });
+      return;
+    }
+
+    const participant = await this.signalingService.kickParticipant(
+      payload.meetingId,
+      payload.targetSocketId,
+    );
+
+    if (!participant) return;
+
+    const targetSocket =
+      (this.server as any).sockets?.get?.(payload.targetSocketId) ??
+      (this.server as any).sockets?.sockets?.get?.(payload.targetSocketId);
+    this.server.to(payload.targetSocketId).emit('meeting:kicked', { reason: 'Removed by host' });
+    this.server.to(payload.meetingId).emit('participant:left', {
+      socketId: payload.targetSocketId,
+      userId: participant.userId,
+      user: participant.user,
+    });
+    if (targetSocket) targetSocket.disconnect();
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('media:force-mute')
+  async onForceMute(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: KickPayload,
+  ) {
+    const user = getUser(client);
+    const canMute = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canMute) {
+      client.emit('error', { message: 'Only host/co-host can mute participants' });
+      return;
+    }
+
+    const targetSocket =
+      (this.server as any).sockets?.get?.(payload.targetSocketId) ??
+      (this.server as any).sockets?.sockets?.get?.(payload.targetSocketId);
+    if (!targetSocket) {
+      client.emit('error', { message: 'Participant not found' });
+      return;
+    }
+
+    const targetUserId = (targetSocket.data as SocketData).user?.sub;
+    targetSocket.data.audioEnabled = false;
+    if (targetUserId) {
+      await this.signalingService.toggleMedia(
+        payload.meetingId,
+        targetUserId,
+        'audio',
+        false,
+      );
+    }
+    this.server.to(payload.targetSocketId).emit('media:force-mute', {
+      meetingId: payload.meetingId,
+    });
+    this.server.to(payload.meetingId).emit('media:updated', {
+      socketId: payload.targetSocketId,
+      userId: (targetSocket.data as SocketData).user?.sub,
+      user: (targetSocket.data as SocketData).profile,
+      type: 'audio',
+      enabled: false,
+    });
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('media:ask-unmute')
+  async onAskUnmute(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: AskUnmutePayload,
+  ) {
+    const user = getUser(client);
+    const canAsk = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canAsk) {
+      client.emit('error', { message: 'Only host/co-host can ask to unmute' });
+      return;
+    }
+
+    this.server.to(payload.targetSocketId).emit('media:ask-unmute', {
+      meetingId: payload.meetingId,
+    });
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('meeting:make-cohost')
+  async onMakeCoHost(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: MakeCoHostPayload,
+  ) {
+    const user = getUser(client);
+    const canPromote = await this.signalingService.isHost(payload.meetingId, user.sub);
+    if (!canPromote) {
+      client.emit('error', { message: 'Only host can assign co-host' });
+      return;
+    }
+
+    const updated = await this.signalingService.setParticipantRole(
+      payload.meetingId,
+      payload.targetUserId,
+      'CO_HOST',
+    );
+    const sockets = await this.server.in(payload.meetingId).fetchSockets();
+    sockets.forEach((socket) => {
+      const socketUserId = (socket.data as SocketData).user?.sub;
+      if (socketUserId === payload.targetUserId) {
+        socket.data.role = updated.role;
+      }
+    });
+
+    this.server.to(payload.meetingId).emit('participant:role-updated', {
+      userId: payload.targetUserId,
+      role: updated.role,
+    });
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('meeting:remove-cohost')
+  async onRemoveCoHost(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: RemoveCoHostPayload,
+  ) {
+    const user = getUser(client);
+    const canDemote = await this.signalingService.isHost(payload.meetingId, user.sub);
+    if (!canDemote) {
+      client.emit('error', { message: 'Only host can remove co-host' });
+      return;
+    }
+
+    const updated = await this.signalingService.setParticipantRole(
+      payload.meetingId,
+      payload.targetUserId,
+      'PARTICIPANT',
+    );
+    const sockets = await this.server.in(payload.meetingId).fetchSockets();
+    sockets.forEach((socket) => {
+      const socketUserId = (socket.data as SocketData).user?.sub;
+      if (socketUserId === payload.targetUserId) {
+        socket.data.role = updated.role;
+      }
+    });
+
+    this.server.to(payload.meetingId).emit('participant:role-updated', {
+      userId: payload.targetUserId,
+      role: updated.role,
+    });
   }
 }

@@ -11,7 +11,7 @@ import { MeetingStatus, ParticipantRole } from '@prisma/client';
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /** Generate a short, unique, readable room code */
   private generateRoomCode(): string {
@@ -112,6 +112,23 @@ export class MeetingsService {
   async getMeetingById(meetingId: string) {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
+      include: {
+        host: { select: { id: true, name: true, avatarUrl: true } },
+        participants: {
+          where: { leftAt: null },
+          include: {
+            user: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
+      },
+    });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+    return meeting;
+  }
+
+  async getMeetingByRoomCode(roomCode: string) {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { roomCode },
       include: {
         host: { select: { id: true, name: true, avatarUrl: true } },
         participants: {

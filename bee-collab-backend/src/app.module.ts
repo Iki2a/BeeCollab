@@ -24,4 +24,4 @@ import { SignalingModule } from './signaling/signaling.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

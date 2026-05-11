@@ -10,4 +10,4 @@ import { SignalingModule } from '../signaling/signaling.module';
   providers: [MeetingsService, MeetingsCleanupService],
   exports: [MeetingsService],
 })
-export class MeetingsModule {}
+export class MeetingsModule { }

@@ -14,4 +14,12 @@ export interface WsUser {
  */
 export interface SocketData {
   user: WsUser;
+  profile?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+  };
+  role?: 'HOST' | 'CO_HOST' | 'PARTICIPANT';
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
 }

@@ -12,7 +12,7 @@ export class MeetingsCleanupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly signalingGateway: SignalingGateway,
-  ) {}
+  ) { }
 
   @Interval(30000)
   async closeExpiredMeetings() {

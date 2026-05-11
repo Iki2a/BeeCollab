@@ -275,11 +275,21 @@
 .statusDot.offline { background-color: #d93025; }
 
 @media (max-width: 900px) {
+  .header {
+    padding: 12px 16px;
+  }
+  .dateTime {
+    display: none;
+  }
+  .headerIcons {
+    gap: 8px;
+  }
   .mainContent {
     flex-direction: column;
-    justify-content: center;
-    gap: 60px;
-    padding: 40px 24px;
+    justify-content: flex-start;
+    gap: 40px;
+    padding: 40px 16px;
+    margin-top: 20px;
   }
   
   .leftColumn {
@@ -287,9 +297,54 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    max-width: 100%;
+  }
+
+  .title {
+    font-size: 32px;
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    font-size: 16px;
+    margin-bottom: 32px;
+    max-width: 100%;
   }
   
   .actionArea {
     justify-content: center;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .newMeetingBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .inputGroup {
+    width: 100%;
+  }
+
+  .codeInput {
+    width: 100%;
+  }
+
+  .joinBtn {
+    width: 100%;
+    text-align: center;
+    padding: 12px;
+    height: auto;
+  }
+
+  .rightColumn {
+    display: none; /* Hide illustration on small screens to prioritize actions */
+  }
+
+  .statusIndicator {
+    bottom: 10px;
+    left: 10px;
+    font-size: 10px;
+    padding: 4px 8px;
   }
 }

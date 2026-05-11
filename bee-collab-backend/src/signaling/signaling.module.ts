@@ -9,4 +9,4 @@ import { AuthModule } from '../auth/auth.module';
   providers: [SignalingGateway, SignalingService],
   exports: [SignalingGateway],
 })
-export class SignalingModule {}
+export class SignalingModule { }
