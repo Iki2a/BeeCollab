@@ -589,6 +589,14 @@ export default function Meeting() {
       } else if (videoTrack && stream) {
         pc.addTrack(videoTrack, stream);
       }
+
+      // Upgrade any recvonly transceivers to sendrecv now that we have
+      // local tracks, so the media actually gets sent to the remote peer.
+      for (const t of pc.getTransceivers()) {
+        if (t.sender.track && t.direction === 'recvonly') {
+          t.direction = 'sendrecv';
+        }
+      }
     });
 
     if (!activeSocket) return;
