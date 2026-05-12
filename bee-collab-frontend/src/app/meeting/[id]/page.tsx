@@ -610,6 +610,23 @@ export default function Meeting() {
     }
   };
 
+  const resumeMediaPlayback = async () => {
+    const videos = Array.from(document.querySelectorAll('video'));
+    let anyFailed = false;
+    await Promise.all(
+      videos.map(async (video) => {
+        try {
+          await video.play();
+        } catch (e) {
+          anyFailed = true;
+        }
+      }),
+    );
+    if (!anyFailed) {
+      setShowAutoplayOverlay(false);
+    }
+  };
+
   const stopScreenShare = async () => {
     const screenTrack = screenStreamRef.current?.getVideoTracks()[0];
     if (screenTrack) {
@@ -1350,6 +1367,47 @@ export default function Meeting() {
             {[0, 1, 2].map(i => (
               <div key={i} style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', animation: `bounce 1s infinite ${i * 0.2}s` }}></div>
             ))}
+          </div>
+        </div>
+      )}
+      {showAutoplayOverlay && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          zIndex: 9998,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          color: '#ffffff',
+          padding: '1.5rem'
+        }}>
+          <div style={{
+            background: 'rgba(20,20,20,0.9)',
+            padding: '1.5rem',
+            borderRadius: '14px',
+            maxWidth: '420px',
+            width: '90%'
+          }}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>Enable audio/video</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', color: '#d1d5db' }}>
+              Click once to allow playback.
+            </p>
+            <button
+              onClick={resumeMediaPlayback}
+              style={{
+                background: '#1a73e8',
+                border: 'none',
+                color: 'white',
+                borderRadius: '10px',
+                padding: '0.6rem 1rem',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              Enable now
+            </button>
           </div>
         </div>
       )}
