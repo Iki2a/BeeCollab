@@ -979,6 +979,7 @@ export default function Meeting() {
         }
       }
 
+      localStreamRef.current = nextStream;
       setLocalStream(nextStream);
       await updatePeerConnectionsTracks(nextStream, socket);
     } catch (e) {
@@ -1083,6 +1084,7 @@ export default function Meeting() {
         }
       }
 
+      localStreamRef.current = stream;
       setLocalStream(stream);
       setMediaEnabled({ video: newVideoState, audio: newAudioState });
       await updatePeerConnectionsTracks(stream, socket);
