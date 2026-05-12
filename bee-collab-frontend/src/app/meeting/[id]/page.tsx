@@ -541,6 +541,14 @@ export default function Meeting() {
       screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
     }
 
+    // If there are NO local tracks (user joined with cam/mic off), add
+    // recvonly transceivers so onnegotiationneeded still fires and the SDP
+    // includes audio/video m-lines — allowing us to RECEIVE remote streams.
+    if (!pc.getSenders().some((s) => s.track !== null)) {
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      pc.addTransceiver('video', { direction: 'recvonly' });
+    }
+
     return state;
   };
 
@@ -821,6 +829,29 @@ export default function Meeting() {
           await Promise.all(
             pending.map((candidate) => pc.addIceCandidate(candidate)),
           );
+        }
+
+        // After a collision where we (polite) rolled back our own offer and
+        // answered theirs, our local tracks lost their negotiation.  Some
+        // browsers won't re-fire onnegotiationneeded automatically, so we
+        // kick a new offer manually to make sure the remote side receives
+        // our media tracks.
+        if (offerCollision && state.polite) {
+          setTimeout(async () => {
+            try {
+              state.makingOffer = true;
+              await pc.setLocalDescription(await pc.createOffer());
+              newSocket.emit('webrtc:offer', {
+                to: targetId,
+                from: newSocket.id,
+                sdp: pc.localDescription,
+              });
+            } catch (e) {
+              console.error('[webrtc] Post-collision renegotiation failed', e);
+            } finally {
+              state.makingOffer = false;
+            }
+          }, 250);
         }
       } catch (err) {
         console.error('[webrtc:offer] Failed to handle offer', err);
