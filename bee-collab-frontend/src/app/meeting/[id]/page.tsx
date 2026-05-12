@@ -399,21 +399,7 @@ export default function Meeting() {
     setRemoteStreams(nextStreams);
   };
 
-  /**
-   * Create (or return existing) RTCPeerConnection for a remote peer.
-   *
-   * @param skipTracks  When true, local media tracks are NOT added during
-   *                    creation.  Use this when the PC is being created in
-   *                    response to an incoming offer – tracks will be added
-   *                    explicitly AFTER the offer/answer exchange so that
-   *                    onnegotiationneeded does not fire a spurious second
-   *                    offer that collides with the just-completed handshake.
-   */
-  const createPeerConnection = (
-    targetId: string,
-    activeSocket: Socket,
-    { skipTracks = false }: { skipTracks?: boolean } = {},
-  ) => {
+  const createPeerConnection = (targetId: string, activeSocket: Socket) => {
     const existing = peerStateRef.current[targetId];
     if (existing) return existing;
 
@@ -546,34 +532,6 @@ export default function Meeting() {
     };
 
     // Add tracks AFTER attaching all event listeners so negotiationneeded fires reliably!
-    // Skip when this PC is created in response to an incoming offer – the caller will
-    // add tracks after the offer/answer exchange to avoid a spurious renegotiation.
-    if (!skipTracks) {
-      const stream = localStreamRef.current;
-      if (stream) {
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      }
-      const screenStream = screenStreamRef.current;
-      if (screenStream) {
-        screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
-      }
-
-      // If there are NO local tracks at all (user joined with cam/mic off),
-      // add recvonly transceivers so that onnegotiationneeded still fires
-      // and the SDP includes audio/video m-lines, allowing us to RECEIVE
-      // remote streams even though we're not sending anything yet.
-      const hasAnyTracks = pc.getSenders().some((s) => s.track !== null);
-      if (!hasAnyTracks) {
-        pc.addTransceiver('audio', { direction: 'recvonly' });
-        pc.addTransceiver('video', { direction: 'recvonly' });
-      }
-    }
-
-    return state;
-  };
-
-  /** Add local media tracks to an existing peer connection. */
-  const addLocalTracksToPeer = (pc: RTCPeerConnection) => {
     const stream = localStreamRef.current;
     if (stream) {
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -582,6 +540,8 @@ export default function Meeting() {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
     }
+
+    return state;
   };
 
   const updatePeerConnectionsTracks = async (
@@ -805,10 +765,7 @@ export default function Meeting() {
 
       if (!data?.socketId || data.socketId === newSocket.id) return;
       playSound('join');
-      // Do NOT create a peer connection here.
-      // The new joiner will initiate the connection via meeting:state,
-      // and we will create the peer connection reactively when we
-      // receive their webrtc:offer. This avoids offer collisions.
+      createPeerConnection(data.socketId, newSocket);
     });
 
     newSocket.on('participant:left', (data) => {
@@ -828,10 +785,7 @@ export default function Meeting() {
       if (!payload?.from || payload.from === newSocket.id || !payload.sdp) return;
 
       const targetId = payload.from;
-      // Create the PC without adding local tracks yet – avoids a spurious
-      // onnegotiationneeded offer that would collide with this handshake.
-      const isNewPc = !peerStateRef.current[targetId];
-      const state = createPeerConnection(targetId, newSocket, { skipTracks: isNewPc });
+      const state = createPeerConnection(targetId, newSocket);
       const pc = state.pc;
       const description = new RTCSessionDescription(payload.sdp);
 
@@ -867,14 +821,6 @@ export default function Meeting() {
           await Promise.all(
             pending.map((candidate) => pc.addIceCandidate(candidate)),
           );
-        }
-
-        // If this was a brand-new PC (created because we received an offer),
-        // add our local tracks NOW.  This will trigger onnegotiationneeded
-        // which sends our own offer back to the remote peer, allowing them
-        // to receive our camera/mic/screen streams.
-        if (isNewPc) {
-          addLocalTracksToPeer(pc);
         }
       } catch (err) {
         console.error('[webrtc:offer] Failed to handle offer', err);
