@@ -558,17 +558,14 @@ export default function Meeting() {
       const senders = pc.getSenders();
       const screenTrack = screenStreamRef.current?.getVideoTracks()[0];
 
-      let audioSender = senders.find(s => s.track?.kind === 'audio');
-      let videoSender = senders.find(s => s.track?.kind === 'video' && s.track !== screenTrack);
-
-      if (!audioSender) {
-        const t = pc.getTransceivers().find(t => t.receiver.track.kind === 'audio');
-        if (t) audioSender = t.sender;
-      }
-      if (!videoSender) {
-        const t = pc.getTransceivers().find(t => t.receiver.track.kind === 'video' && t.sender.track !== screenTrack);
-        if (t) videoSender = t.sender;
-      }
+      // Only match senders that already have an active track.
+      // Do NOT fall back to transceiver senders with null tracks — those
+      // are from the remote offer and using replaceTrack on them won't
+      // trigger renegotiation (direction stays recvonly).  Letting the
+      // code fall through to addTrack will reuse the transceiver, flip
+      // direction to sendrecv, and fire onnegotiationneeded properly.
+      const audioSender = senders.find(s => s.track?.kind === 'audio');
+      const videoSender = senders.find(s => s.track?.kind === 'video' && s.track !== screenTrack);
 
       if (audioSender) {
         audioSender.replaceTrack(audioTrack);
@@ -581,8 +578,6 @@ export default function Meeting() {
       } else if (videoTrack && stream) {
         pc.addTrack(videoTrack, stream);
       }
-
-
     });
 
     if (!activeSocket) return;
