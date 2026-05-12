@@ -1,11 +1,13 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Hand, Users, MessageSquare,
-  Send, X, Subtitles, MonitorUp, MoreVertical, Info, LayoutGrid
+  Send, X, Subtitles, MonitorUp, MoreVertical, Info
 } from 'lucide-react';
 
 export default function Meeting() {
@@ -18,12 +20,15 @@ export default function Meeting() {
   const [messages, setMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [isJoining, setIsJoining] = useState(true);
   const [mediaEnabled, setMediaEnabled] = useState({ audio: false, video: false });
   const [activeTab, setActiveTab] = useState<'chat' | 'people' | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [isCoHost, setIsCoHost] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
   const [meetingEndedReason, setMeetingEndedReason] = useState('');
+  const [meetingEndType, setMeetingEndType] = useState<'ended' | 'kicked' | 'expired'>('ended');
+  const [countdown, setCountdown] = useState(30);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream[]>>({});
   const [meetingInfo, setMeetingInfo] = useState<{
     title: string;
@@ -40,7 +45,6 @@ export default function Meeting() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [speakingParticipants, setSpeakingParticipants] = useState<Record<string, boolean>>({});
   const [showAutoplayOverlay, setShowAutoplayOverlay] = useState(false);
-  const [isGridView, setIsGridView] = useState(true);
   const [isDeviceSettingsOpen, setIsDeviceSettingsOpen] = useState(false);
   const [peopleSearch, setPeopleSearch] = useState('');
   const [openParticipantMenuUserId, setOpenParticipantMenuUserId] = useState<string | null>(null);
@@ -50,6 +54,7 @@ export default function Meeting() {
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const mediaEnabledRef = useRef(mediaEnabled);
@@ -92,6 +97,41 @@ export default function Meeting() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [openParticipantMenuUserId]);
+
+  useEffect(() => {
+    if (!meetingEnded || meetingEndType === 'kicked') return;
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          router.push('/');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [meetingEnded, router]);
+  useEffect(() => {
+    if (activeTab === 'chat' && chatContainerRef.current) {
+      const container = chatContainerRef.current;
+      // Scroll to bottom immediately when opening chat or when new messages arrive
+      // unless the user is scrolling up (only for message updates)
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'chat' && chatContainerRef.current) {
+      const container = chatContainerRef.current;
+      const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 150;
+      if (isAtBottom) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (!socket?.id) return;
@@ -188,11 +228,66 @@ export default function Meeting() {
     };
   }, [localStream, mediaEnabled.audio, socket, meetingId]);
 
+  const playSound = (type: 'join' | 'leave' | 'self-join') => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+
+      if (type === 'join') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now); // A4
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.2); // A5
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } else if (type === 'leave') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(660, now); // E5
+        osc.frequency.exponentialRampToValueAtTime(330, now + 0.2); // E4
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } else if (type === 'self-join') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.setValueAtTime(659.25, now + 0.15); // E5
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.2);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      }
+      
+      setTimeout(() => ctx.close(), 1000);
+    } catch (e) {
+      console.warn('Failed to play sound effect:', e);
+    }
+  };
+
   const mobileStyles = `
     @media (max-width: 768px) {
       .video-grid-container {
         padding: 0.5rem !important;
         gap: 0.5rem !important;
+      }
+      .video-grid-inner {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto !important;
+        max-width: 100% !important;
+        gap: 0.75rem !important;
       }
       .participant-card {
         flex: 1 1 100% !important;
@@ -356,10 +451,18 @@ export default function Meeting() {
     };
 
     pc.onconnectionstatechange = () => {
-      if (['failed', 'disconnected', 'closed'].includes(pc!.connectionState)) {
+      console.log(`Connection state with ${targetId}: ${pc.connectionState}`);
+      if (['failed', 'closed'].includes(pc!.connectionState)) {
         pc!.close();
         delete peerStateRef.current[targetId];
         removeAllRemoteStreams(targetId);
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state with ${targetId}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'failed') {
+        pc.restartIce();
       }
     };
 
@@ -474,12 +577,10 @@ export default function Meeting() {
       return;
     }
 
-    const shareAudio = window.confirm('Apakah Anda ingin membagikan suara (audio) dari layar juga?');
-
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: shareAudio
+        audio: true
       });
       const screenTracks = screenStream.getTracks();
       if (screenTracks.length === 0) return;
@@ -556,6 +657,7 @@ export default function Meeting() {
         audioEnabled: initialMedia.audio,
         videoEnabled: initialMedia.video
       });
+      playSound('self-join');
     });
 
     newSocket.on('meeting:state', async (data) => {
@@ -580,11 +682,13 @@ export default function Meeting() {
       refreshMeetingInfo();
 
       if (!data?.socketId || data.socketId === newSocket.id) return;
+      playSound('join');
       createPeerConnection(data.socketId, newSocket);
     });
 
     newSocket.on('participant:left', (data) => {
       setParticipants(prev => prev.filter(p => p.socketId !== data.socketId));
+      playSound('leave');
       if (!data?.socketId) return;
 
       const state = peerStateRef.current[data.socketId];
@@ -671,16 +775,26 @@ export default function Meeting() {
       setMessages(prev => [...prev, msg]);
     });
 
+    newSocket.on('chat:history', (history) => {
+      setMessages(history);
+    });
+
     newSocket.on('meeting:ended', (data) => {
       const reason = data?.reason || 'Pertemuan telah diakhiri oleh host.';
       setMeetingEndedReason(reason);
+      if (reason.toLowerCase().includes('durasi') || reason.toLowerCase().includes('habis') || reason.toLowerCase().includes('time')) {
+        setMeetingEndType('expired');
+      } else {
+        setMeetingEndType('ended');
+      }
       setMeetingEnded(true);
     });
 
     newSocket.on('meeting:kicked', (payload) => {
       const reason = payload?.reason || 'Anda dikeluarkan dari meeting.';
-      alert(reason);
-      router.push('/');
+      setMeetingEndedReason(reason);
+      setMeetingEndType('kicked');
+      setMeetingEnded(true);
     });
 
     newSocket.on('media:force-mute', () => {
@@ -784,9 +898,17 @@ export default function Meeting() {
             setCurrentUserId(meData.id);
             setIsHost(data.hostId === meData.id);
           }
+          
+          // Once everything is loaded, stop joining state
+          setTimeout(() => {
+            setIsJoining(false);
+          }, 800);
+        } else if (res.status === 404) {
+          router.push('/');
         }
       } catch (e) {
         console.error(e);
+        setIsJoining(false);
       }
     }
     refreshMeetingInfo();
@@ -1092,31 +1214,179 @@ export default function Meeting() {
   const nonScreenItems = displayItems.filter(item => item.type !== 'screen');
   const hasScreenShare = Boolean(screenShareItem);
 
-  const getCardStyle = (isSingle: boolean, isGrid: boolean) => {
-    if (!isGrid) {
-      return {
-        flex: '1 1 100%',
-        maxWidth: 'calc((100vh - 120px) * 16 / 9)',
-        maxHeight: '100%'
-      };
-    }
-
-    return {
-      flex: isSingle ? '1 1 100%' : '1 1 calc(50% - 0.5rem)',
-      maxWidth: isSingle ? 'calc((100vh - 120px) * 16 / 9)' : 'calc((100vh - 120px) * 16 / 9 / 2)',
-      maxHeight: isSingle ? '100%' : 'calc(50% - 0.5rem)'
-    };
+  const getGridDimensions = (count: number) => {
+    if (count <= 1) return { cols: 1, rows: 1 };
+    if (count <= 2) return { cols: 2, rows: 1 };
+    if (count <= 4) return { cols: 2, rows: 2 };
+    if (count <= 6) return { cols: 3, rows: 2 };
+    if (count <= 9) return { cols: 3, rows: 3 };
+    if (count <= 12) return { cols: 4, rows: 3 };
+    if (count <= 16) return { cols: 4, rows: 4 };
+    return { cols: 5, rows: 4 };
   };
+
+  const gridInfo = getGridDimensions(displayItems.length);
 
   return (
     <main style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: colors.bgApp, overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
       <style>{mobileStyles}</style>
+      
+      {isJoining && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: '#ffffff',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+          `}</style>
+          <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ 
+              width: '48px', 
+              height: '48px', 
+              background: '#1a73e8', 
+              borderRadius: '12px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(26, 115, 232, 0.3)'
+            }}>
+              <Video size={28} color="white" />
+            </div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1f3b64', margin: 0, letterSpacing: '-0.02em' }}>BeeCollab</h1>
+          </div>
+          
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid rgba(26, 115, 232, 0.1)',
+            borderTop: '3px solid #1a73e8',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            marginBottom: '1.5rem'
+          }}></div>
+          
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#202124', margin: '0 0 0.5rem 0' }}>Sedang bergabung...</h2>
+            <p style={{ fontSize: '0.875rem', color: '#5f6368', margin: 0 }}>Menyiapkan kamera dan mikrofon Anda</p>
+          </div>
+          
+          <div style={{ position: 'absolute', bottom: '3rem', display: 'flex', gap: '0.5rem' }}>
+             {[0, 1, 2].map(i => (
+               <div key={i} style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', animation: `bounce 1s infinite ${i * 0.2}s` }}></div>
+             ))}
+          </div>
+        </div>
+      )}
       {meetingEnded && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'white', padding: '2rem', borderRadius: '16px', width: '90%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 12px 30px rgba(0,0,0,0.25)' }}>
-            <h2 style={{ margin: '0 0 0.75rem 0', color: '#202124' }}>Meeting ended</h2>
-            <p style={{ margin: '0 0 1.5rem 0', color: '#5f6368' }}>{meetingEndedReason || 'Pertemuan telah berakhir.'}</p>
-            <button onClick={() => router.push('/')} style={{ background: '#1a73e8', color: 'white', border: 'none', borderRadius: '999px', padding: '0.75rem 1.5rem', fontWeight: 600, cursor: 'pointer' }}>Kembali ke Home</button>
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: '#ffffff',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#202124',
+          textAlign: 'center',
+          fontFamily: "'Google Sans', Roboto, Arial, sans-serif"
+        }}>
+          {/* Top Left Countdown */}
+          {meetingEndType !== 'kicked' && (
+            <div style={{ position: 'absolute', top: '2rem', left: '2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ position: 'relative', width: '36px', height: '36px' }}>
+                <svg width="36" height="36" viewBox="0 0 40 40">
+                  <circle cx="20" cy="20" r="18" fill="none" stroke="#e8eaed" strokeWidth="3" />
+                  <circle 
+                    cx="20" cy="20" r="18" 
+                    fill="none" 
+                    stroke="#1a73e8" 
+                    strokeWidth="3" 
+                    strokeDasharray={113.1} 
+                    strokeDashoffset={113.1 - (113.1 * countdown / 30)}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 1s linear', transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+                  />
+                  <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="12" fontWeight="500" fill="#202124">
+                    {countdown}
+                  </text>
+                </svg>
+              </div>
+              <span style={{ fontSize: '14px', color: '#5f6368' }}>Returning to home screen</span>
+            </div>
+          )}
+
+          {/* Main Content */}
+          <div style={{ maxWidth: '800px', width: '90%' }}>
+            {/* Logo at Top */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#5f6368', marginBottom: '3.5rem' }}>
+               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="#00832d" />
+                </svg>
+                <span style={{ fontWeight: 500, fontSize: '1.6rem', letterSpacing: '-0.02em' }}>BeeCollab</span>
+            </div>
+
+            <h1 style={{ 
+              fontSize: '2.75rem', 
+              fontWeight: 400, 
+              color: '#202124', 
+              letterSpacing: '-0.015em',
+              lineHeight: '1.25',
+              maxWidth: '640px',
+              margin: '0 auto 4rem'
+            }}>
+              {meetingEndType === 'kicked' ? "You have been removed from the meeting" : 
+               meetingEndType === 'expired' ? "The meeting time has ended" : 
+               "You have ended the meeting for everyone"}
+            </h1>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
+              <button
+                onClick={() => router.push('/')}
+                style={{
+                  background: '#1a73e8',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '24px',
+                  padding: '12px 32px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#1b66c9';
+                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(60,64,67,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#1a73e8';
+                  e.currentTarget.style.boxShadow = '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)';
+                }}
+              >
+                Return to home screen
+              </button>
+              
+              {meetingEndType === 'kicked' && (
+                <button 
+                  style={{ background: 'none', border: 'none', color: '#1a73e8', fontSize: '14px', fontWeight: 500, cursor: 'pointer', opacity: 0.8 }}
+                  onClick={() => window.location.reload()}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                >
+                  Rejoin
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1208,306 +1478,177 @@ export default function Meeting() {
       <div style={{ flex: 1, display: 'flex', position: 'relative', width: '100%', overflow: 'hidden' }}>
 
         {/* Video Grid Area */}
-        <div className="video-grid-container" style={{ flex: 1, padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s ease' }}>
+        <div className="video-grid-container" style={{ 
+          flex: 1, 
+          padding: '1.5rem', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          transition: 'all 0.3s ease',
+          overflow: 'hidden',
+          background: '#1a1d21'
+        }}>
           {hasScreenShare ? (
-            <div style={{ width: '100%', height: '100%', display: 'flex', gap: '1rem', alignItems: 'stretch', justifyContent: 'center' }}>
-              <div style={{ flex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {[screenShareItem].map((p: any) => {
-                  const originalId = p.originalId || p.id;
-                  const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
-                  const showHand = participantUserId && p.type === 'camera' ? raisedHands[participantUserId] : false;
-                  const isVideoEnabled = true;
-                  const isAudioEnabled = true;
-                  const isSpeaking = (p.isLocal ? speakingParticipants['local'] : speakingParticipants[originalId]) && p.type === 'camera';
-
-                  return (
-                    <div key={p.id} className="participant-card" style={{
-                      position: 'relative',
-                      background: colors.bgDarkNavy,
-                      borderRadius: '24px',
-                      overflow: 'hidden',
-                      flex: '1 1 100%',
-                      maxWidth: 'calc((100vh - 120px) * 16 / 9)',
-                      maxHeight: '100%',
-                      aspectRatio: '16/9',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      border: isSpeaking ? `3px solid ${colors.blueHighlight}` : '3px solid transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
-                    }}>
-                      {p.isLocal ? (
-                        <video
-                          ref={bindVideo(screenStreamRef.current)}
-                          autoPlay
-                          muted
-                          playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <video
-                          ref={bindVideo(p.stream || null)}
-                          autoPlay
-                          playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
-                      )}
-
-                      {p.type === 'camera' && !isAudioEnabled && (
-                        <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                          <MicOff size={16} color={colors.red} />
-                        </div>
-                      )}
-
-                      {showHand && (
-                        <div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                          <span style={{ fontSize: '18px', lineHeight: 1 }}>✋</span>
-                        </div>
-                      )}
-
-                      <div className="name-badge-container" style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', zIndex: 10 }}>
-                        <div className="name-badge" style={{ color: 'white', background: 'rgba(0,0,0,0.4)', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.875rem', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {p.name}
-                        </div>
-                      </div>
+            <div style={{ 
+              width: '100%', 
+              height: '100%', 
+              display: 'flex', 
+              gap: '1rem', 
+              flexDirection: window.innerWidth < 1024 ? 'column' : 'row'
+            }}>
+              {/* Large Screen Share Area */}
+              <div style={{ 
+                flex: 4, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                position: 'relative'
+              }}>
+                {[screenShareItem].map((p: any) => (
+                  <div key={p.id} style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    position: 'relative',
+                    background: '#000',
+                    borderRadius: '16px',
+                    overflow: 'hidden',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {p.isLocal ? (
+                      <video ref={bindVideo(screenStreamRef.current)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    )}
+                    <div style={{ position: 'absolute', bottom: '1rem', left: '1rem', background: 'rgba(0,0,0,0.6)', padding: '4px 12px', borderRadius: '8px', color: 'white', fontSize: '0.8rem', fontWeight: 500, backdropFilter: 'blur(4px)' }}>
+                      {p.name}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'stretch', justifyContent: 'center' }}>
-                {nonScreenItems.map((p: any, index) => {
-                  const isSingle = nonScreenItems.length === 1;
+
+              {/* Sidebar for other participants */}
+              <div style={{ 
+                flex: 1, 
+                display: 'flex', 
+                flexDirection: window.innerWidth < 1024 ? 'row' : 'column', 
+                gap: '0.75rem', 
+                overflowX: window.innerWidth < 1024 ? 'auto' : 'hidden',
+                overflowY: window.innerWidth < 1024 ? 'hidden' : 'auto',
+                padding: '0.25rem',
+                minWidth: window.innerWidth < 1024 ? '100%' : '200px',
+                maxWidth: window.innerWidth < 1024 ? '100%' : '280px'
+              }}>
+                {nonScreenItems.map((p: any) => {
                   const originalId = p.originalId || p.id;
                   const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
-                  const showHand = participantUserId && p.type === 'camera' ? raisedHands[participantUserId] : false;
-                  const remoteVideoTrack = !p.isLocal && p.type === 'camera' ? p.stream?.getVideoTracks()?.[0] : null;
-                  const remoteAudioTrack = !p.isLocal && p.type === 'camera' ? p.stream?.getAudioTracks()?.[0] : null;
-                  const isRemoteVideoLive = Boolean(
-                    remoteVideoTrack && remoteVideoTrack.readyState === 'live' && remoteVideoTrack.enabled,
-                  );
-                  const isRemoteAudioLive = Boolean(
-                    remoteAudioTrack && remoteAudioTrack.readyState === 'live' && remoteAudioTrack.enabled,
-                  );
-                  const isVideoEnabled = p.isLocal
-                    ? mediaEnabled.video
-                    : p.videoEnabled !== undefined
-                      ? p.videoEnabled
-                      : isRemoteVideoLive;
-                  const isAudioEnabled = p.isLocal
-                    ? mediaEnabled.audio
-                    : p.audioEnabled !== undefined
-                      ? p.audioEnabled
-                      : isRemoteAudioLive;
-                  const isSpeaking = (p.isLocal ? speakingParticipants['local'] : speakingParticipants[originalId]) && p.type === 'camera';
+                  const showHand = participantUserId ? raisedHands[participantUserId] : false;
+                  const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
+                  const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
+                  const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
 
                   return (
-                    <div key={p.id} className="participant-card" style={{
-                      position: 'relative',
-                      background: colors.bgDarkNavy,
-                      borderRadius: '24px',
-                      overflow: 'hidden',
-                      flex: isSingle ? '1 1 100%' : '1 1 auto',
+                    <div key={p.id} style={{ 
+                      flexShrink: 0,
+                      width: window.innerWidth < 1024 ? '180px' : '100%',
                       aspectRatio: '16/9',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      border: isSpeaking ? `3px solid ${colors.blueHighlight}` : '3px solid transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
+                      background: colors.bgDarkNavy,
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      border: isSpeaking ? `2px solid ${colors.blueHighlight}` : '2px solid transparent',
+                      boxShadow: isSpeaking ? `0 0 15px ${colors.blueHighlight}44` : 'none',
+                      transition: 'all 0.2s ease'
                     }}>
                       {p.isLocal ? (
-                        p.type === 'screen' ? (
-                          <video
-                            ref={bindVideo(screenStreamRef.current)}
-                            autoPlay
-                            muted
-                            playsInline
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <>
-                            <video
-                              ref={bindVideo(localStream)}
-                              autoPlay
-                              muted
-                              playsInline
-                              style={{ width: '100%', height: '100%', objectFit: 'contain', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }}
-                            />
-                            {!isVideoEnabled && (
-                              <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '1px solid #475a7c' }}>
-                                Anda
-                              </div>
-                            )}
-                          </>
-                        )
+                        <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }} />
                       ) : (
-                        p.type === 'screen' ? (
-                          <video
-                            ref={bindVideo(p.stream || null)}
-                            autoPlay
-                            playsInline
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <>
-                            <video
-                              ref={bindVideo(p.stream || null)}
-                              autoPlay
-                              playsInline
-                              style={{ width: '100%', height: '100%', objectFit: 'contain', display: p.stream && isVideoEnabled ? 'block' : 'none' }}
-                            />
-                            {(!p.stream || !isVideoEnabled) && (
-                              <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '1px solid #475a7c' }}>
-                                {p.name.charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                          </>
-                        )
+                        <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
                       )}
-
-                      {p.type === 'camera' && !isAudioEnabled && (
-                        <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                          <MicOff size={16} color={colors.red} />
+                      {!isVideoEnabled && (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#2c3e50', color: 'white', fontSize: '1.2rem', fontWeight: 600 }}>
+                          {p.name.charAt(0).toUpperCase()}
                         </div>
                       )}
-
-                      {showHand && (
-                        <div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                          <span style={{ fontSize: '18px', lineHeight: 1 }}>✋</span>
-                        </div>
-                      )}
-
-                      <div className="name-badge-container" style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', zIndex: 10 }}>
-                        <div className="name-badge" style={{ color: 'white', background: 'rgba(0,0,0,0.4)', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.875rem', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ position: 'absolute', bottom: '0.5rem', left: '0.5rem', right: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 }}>
+                        <div style={{ color: 'white', background: 'rgba(0,0,0,0.5)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', maxWidth: '80%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', backdropFilter: 'blur(4px)' }}>
                           {p.name}
                         </div>
+                        {!isAudioEnabled && <MicOff size={12} color={colors.red} style={{ background: 'rgba(0,0,0,0.5)', padding: '2px', borderRadius: '50%' }} />}
                       </div>
+                      {showHand && <div style={{ position: 'absolute', top: '0.5rem', left: '0.5rem', zIndex: 5 }}><span style={{ fontSize: '14px' }}>✋</span></div>}
                     </div>
                   );
                 })}
               </div>
             </div>
           ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignContent: 'center', justifyContent: 'center' }}>
-
-              {/* Participant Cards */}
-              {displayItems.map((p: any, index) => {
-                const isFirst = index === 0;
-                const isSingle = displayItems.length === 1;
+            <div style={{ 
+              width: '100%', 
+              display: 'grid', 
+              gridTemplateColumns: `repeat(${gridInfo.cols}, minmax(0, 1fr))`,
+              gap: '1.5rem',
+              maxWidth: gridInfo.cols === 1 ? '800px' : '1200px',
+              margin: '0 auto',
+              alignContent: 'center',
+              justifyContent: 'center'
+            }}>
+              {displayItems.map((p: any) => {
                 const originalId = p.originalId || p.id;
                 const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
-                const showHand = participantUserId && p.type === 'camera' ? raisedHands[participantUserId] : false;
-                const remoteVideoTrack = !p.isLocal && p.type === 'camera' ? p.stream?.getVideoTracks()?.[0] : null;
-                const remoteAudioTrack = !p.isLocal && p.type === 'camera' ? p.stream?.getAudioTracks()?.[0] : null;
-                const isRemoteVideoLive = Boolean(
-                  remoteVideoTrack && remoteVideoTrack.readyState === 'live' && remoteVideoTrack.enabled,
-                );
-                const isRemoteAudioLive = Boolean(
-                  remoteAudioTrack && remoteAudioTrack.readyState === 'live' && remoteAudioTrack.enabled,
-                );
-                const isVideoEnabled = p.isLocal
-                  ? mediaEnabled.video
-                  : p.videoEnabled !== undefined
-                    ? p.videoEnabled
-                    : isRemoteVideoLive;
-                const isAudioEnabled = p.isLocal
-                  ? mediaEnabled.audio
-                  : p.audioEnabled !== undefined
-                    ? p.audioEnabled
-                    : isRemoteAudioLive;
-                const isSpeaking = (p.isLocal ? speakingParticipants['local'] : speakingParticipants[originalId]) && p.type === 'camera';
+                const showHand = participantUserId ? raisedHands[participantUserId] : false;
+                const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
+                const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
+                const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
 
                 return (
                   <div key={p.id} className="participant-card" style={{
                     position: 'relative',
                     background: colors.bgDarkNavy,
-                    borderRadius: '24px',
+                    borderRadius: '20px',
                     overflow: 'hidden',
-                    ...getCardStyle(isSingle, isGridView),
                     aspectRatio: '16/9',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
                     border: isSpeaking ? `3px solid ${colors.blueHighlight}` : '3px solid transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexDirection: 'column'
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    maxHeight: '100%',
+                    width: '100%'
                   }}>
-
                     {p.isLocal ? (
-                      p.type === 'screen' ? (
-                        <video
-                          ref={bindVideo(screenStreamRef.current)}
-                          autoPlay
-                          muted
-                          playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <>
-                          <video
-                            ref={bindVideo(localStream)}
-                            autoPlay
-                            muted
-                            playsInline
-                            style={{ width: '100%', height: '100%', objectFit: 'contain', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }}
-                          />
-                          {!isVideoEnabled && (
-                            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '1px solid #475a7c' }}>
-                              Anda
-                            </div>
-                          )}
-                        </>
-                      )
+                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }} />
                     ) : (
-                      p.type === 'screen' ? (
-                        <video
-                          ref={bindVideo(p.stream || null)}
-                          autoPlay
-                          playsInline
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <>
-                          <video
-                            ref={bindVideo(p.stream || null)}
-                            autoPlay
-                            playsInline
-                            style={{ width: '100%', height: '100%', objectFit: 'contain', display: p.stream && isVideoEnabled ? 'block' : 'none' }}
-                          />
-                          {(!p.stream || !isVideoEnabled) && (
-                            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '1px solid #475a7c' }}>
-                              {p.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </>
-                      )
+                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
                     )}
-
-                    {/* Mute Icon top right */}
-                    {p.type === 'camera' && !isAudioEnabled && (
-                      <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                        <MicOff size={16} color={colors.red} />
+                    {!isVideoEnabled && (
+                      <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '2px solid rgba(255,255,255,0.1)' }}>
+                        {p.name.charAt(0).toUpperCase()}
                       </div>
                     )}
-
-                    {/* Raise Hand Icon top left */}
-                    {showHand && (
-                      <div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                        <span style={{ fontSize: '18px', lineHeight: 1 }}>✋</span>
-                      </div>
-                    )}
-
-                    {/* Name Badge bottom left */}
-                    <div className="name-badge-container" style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', zIndex: 10 }}>
-                      <div className="name-badge" style={{ color: 'white', background: 'rgba(0,0,0,0.4)', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.875rem', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    
+                    <div style={{ position: 'absolute', bottom: '1rem', left: '1rem', right: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
+                      <div className="name-badge" style={{ color: 'white', background: 'rgba(0,0,0,0.5)', padding: '4px 12px', borderRadius: '10px', fontSize: '0.85rem', maxWidth: '70%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', backdropFilter: 'blur(4px)' }}>
                         {p.name}
                       </div>
+                      {!isAudioEnabled && (
+                        <div style={{ background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+                          <MicOff size={16} color={colors.red} />
+                        </div>
+                      )}
                     </div>
+
+                    {showHand && (
+                      <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10, animation: 'bounce 2s infinite' }}>
+                        <span style={{ fontSize: '24px' }}>✋</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-
             </div>
           )}
         </div>
@@ -1515,17 +1656,10 @@ export default function Meeting() {
         {/* Sidebar */}
         {activeTab && (
           <div className="sidebar-container" style={{ width: '360px', background: 'linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%)', color: '#2b2f38', display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(0,0,0,0.06)', flexShrink: 0, zIndex: 10, boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)', borderTopLeftRadius: '24px', borderBottomLeftRadius: '24px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', padding: '1.1rem 1.25rem', alignItems: 'center', gap: '0.75rem', background: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-              <div style={{ flex: 1, background: '#e9edf5', borderRadius: '999px', display: 'flex', padding: '0.25rem', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.08)' }}>
-                <button onClick={() => setActiveTab('people')} style={{ flex: 1, background: activeTab === 'people' ? '#1f3b64' : 'transparent', color: activeTab === 'people' ? 'white' : '#53627a', border: 'none', borderRadius: '999px', padding: '0.55rem 0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.01em' }}>
-                  <Users size={20} />
-                  <span style={{ fontSize: '0.75rem' }}>People</span>
-                </button>
-                <button onClick={() => setActiveTab('chat')} style={{ flex: 1, background: activeTab === 'chat' ? '#1f3b64' : 'transparent', color: activeTab === 'chat' ? 'white' : '#53627a', border: 'none', borderRadius: '999px', padding: '0.55rem 0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.01em' }}>
-                  <MessageSquare size={20} />
-                  <span style={{ fontSize: '0.75rem' }}>Chat</span>
-                </button>
-              </div>
+            <div style={{ display: 'flex', padding: '1.1rem 1.25rem', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+              <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1f3b64' }}>
+                {activeTab === 'people' ? `Participants (${participants.length})` : 'Chat'}
+              </span>
               <button onClick={() => setActiveTab(null)} style={{ background: '#eef2f7', border: 'none', cursor: 'pointer', color: '#6b7280', width: '36px', height: '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={24} />
               </button>
@@ -1534,7 +1668,26 @@ export default function Meeting() {
             {/* Chat Content */}
             {activeTab === 'chat' && (
               <>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <style>{`
+                  .custom-scrollbar::-webkit-scrollbar {
+                    width: 6px;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 10px;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                  }
+                `}</style>
+                <div 
+                  ref={chatContainerRef}
+                  className="custom-scrollbar"
+                  style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
+                >
                   {messages.map((m, i) => {
                     const isMe = m.senderId === localStorage.getItem('token'); // Simplification for demo
                     return (
@@ -1587,9 +1740,6 @@ export default function Meeting() {
             {/* Other Tabs */}
             {activeTab === 'people' && (
               <div style={{ padding: '1rem 1.25rem 1.5rem', flex: 1, overflowY: 'auto' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Participants ({participants.length})</span>
-                </div>
                 <div style={{ marginBottom: '1rem' }}>
                   <input
                     type="text"
@@ -1644,9 +1794,8 @@ export default function Meeting() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#374151' }}>
-                            {isMe ? 'Anda (You)' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''}
+                            {isMe ? 'Anda (You)' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && '✋'}
                           </span>
-                          {isRaised && <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>✋ Raised hand</span>}
                         </div>
                         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
                           {audioEnabled ? <Mic size={16} color="#16a34a" /> : <MicOff size={16} color="#ef4444" />}
@@ -1735,9 +1884,7 @@ export default function Meeting() {
           <button onClick={() => toggleMedia('video')} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: mediaEnabled.video ? colors.bgDarkNavy : colors.bgDarkNavy, color: mediaEnabled.video ? 'white' : colors.red, transition: 'all 0.2s' }}>
             {mediaEnabled.video ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
-          <button onClick={() => setIsGridView((prev) => !prev)} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isGridView ? colors.bgDarkNavy : '#0f4c75', color: 'white', transition: 'all 0.2s' }}>
-            <LayoutGrid size={20} />
-          </button>
+
           <button onClick={toggleHandRaise} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isHandRaised ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             {isHandRaised ? <Hand size={20} /> : <Hand size={20} />}
           </button>
@@ -1765,9 +1912,7 @@ export default function Meeting() {
             <div style={{ position: 'absolute', right: 0, bottom: '46px', background: '#1f2937', color: 'white', padding: '0.5rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '160px', boxShadow: '0 10px 24px rgba(0,0,0,0.3)' }}>
               {isHost && (
                 <button onClick={() => {
-                  if (window.confirm('Akhiri pertemuan untuk semua orang? (Room akan dihapus)')) {
-                    if (socket) socket.emit('meeting:end', { meetingId });
-                  }
+                  if (socket) socket.emit('meeting:end', { meetingId });
                   setIsLeaveMenuOpen(false);
                 }} style={{ background: '#dc2626', border: 'none', color: 'white', borderRadius: '10px', padding: '0.5rem 0.75rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                   End Meeting

@@ -4,11 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from './dto/auth.dto';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { Strategy, ExtractJwt } = require('passport-jwt') as {
-  Strategy: new (...args: unknown[]) => unknown;
-  ExtractJwt: { fromAuthHeaderAsBearerToken: () => unknown };
-};
+import { Strategy, ExtractJwt } from 'passport-jwt';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

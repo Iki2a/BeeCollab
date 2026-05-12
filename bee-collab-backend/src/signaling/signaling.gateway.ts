@@ -192,6 +192,10 @@ export class SignalingGateway
         videoEnabled: (s.data as SocketData).videoEnabled,
       })),
     });
+
+    // Fetch and send chat history to the new participant
+    const history = await this.chatService.getMessages(payload.meetingId);
+    client.emit('chat:history', history);
   }
 
   // ── WebRTC relay ─────────────────────────────────────────────────────────────

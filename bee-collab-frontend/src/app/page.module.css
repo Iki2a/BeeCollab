@@ -144,8 +144,13 @@
 .keyboardIcon {
   position: absolute;
   left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   color: #5f6368;
-  font-size: 20px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .codeInput {
