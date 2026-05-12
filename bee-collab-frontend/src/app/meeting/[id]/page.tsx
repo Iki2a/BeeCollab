@@ -557,6 +557,16 @@ export default function Meeting() {
       if (screenStream) {
         screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
       }
+
+      // If there are NO local tracks at all (user joined with cam/mic off),
+      // add recvonly transceivers so that onnegotiationneeded still fires
+      // and the SDP includes audio/video m-lines, allowing us to RECEIVE
+      // remote streams even though we're not sending anything yet.
+      const hasAnyTracks = pc.getSenders().some((s) => s.track !== null);
+      if (!hasAnyTracks) {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+      }
     }
 
     return state;
