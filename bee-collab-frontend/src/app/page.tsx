@@ -97,7 +97,7 @@ export default function Home() {
     if (meetingCode.trim()) {
       setLoading(true);
       setLoadingMessage('Menyiapkan ruang pertemuan...');
-      
+
       const apiBase = getApiBase();
       const token = localStorage.getItem('token');
       try {
@@ -105,7 +105,7 @@ export default function Home() {
         const res = await fetch(`${apiBase}/meetings/code/${meetingCode.trim()}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        
+
         if (res.ok) {
           const data = await res.json();
           router.push(`/meeting/${data.id}`);
@@ -140,11 +140,11 @@ export default function Home() {
       setNewMeetingError('Jumlah peserta harus antara 2 sampai 10.');
       return;
     }
-    
+
     setLoading(true);
     setLoadingMessage('Menciptakan ruang pertemuan baru...');
     setNewMeetingError('');
-    
+
     try {
       const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/meetings`, {
@@ -193,16 +193,16 @@ export default function Home() {
         <div className={styles.headerRight}>
           <span className={styles.dateTime}>{currentTime}</span>
           {isLoggedIn ? (
-            <button 
-              className={styles.logoutBtn} 
+            <button
+              className={styles.logoutBtn}
               onClick={handleLogout}
               style={{ background: 'none', border: '1px solid #dadce0', color: '#d93025', fontWeight: 500, fontSize: '14px', cursor: 'pointer', padding: '8px 16px', borderRadius: '4px' }}
             >
               Logout
             </button>
           ) : (
-            <button 
-              className={styles.loginBtn} 
+            <button
+              className={styles.loginBtn}
               onClick={() => router.push('/login')}
               style={{ background: 'none', border: 'none', color: '#1a73e8', fontWeight: 500, fontSize: '16px', cursor: 'pointer' }}
             >

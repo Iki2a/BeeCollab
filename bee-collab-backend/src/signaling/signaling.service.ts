@@ -19,8 +19,8 @@ export class SignalingService {
           userId,
           socketId,
           role: 'PARTICIPANT',
-          audioEnabled: audioEnabled ?? true,
-          videoEnabled: videoEnabled ?? true
+          audioEnabled: audioEnabled ?? false,
+          videoEnabled: videoEnabled ?? false
         },
         update: {
           socketId,

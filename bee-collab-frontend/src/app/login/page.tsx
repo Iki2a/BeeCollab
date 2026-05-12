@@ -31,8 +31,8 @@ export default function AuthPage() {
     setError('');
 
     const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
-    const body = mode === 'login' 
-      ? { email, password } 
+    const body = mode === 'login'
+      ? { email, password }
       : { email, name, password };
 
     try {
@@ -73,58 +73,58 @@ export default function AuthPage() {
         <p style={{ color: '#5f6368', textAlign: 'center', marginBottom: '2rem', fontSize: '0.875rem' }}>
           {mode === 'login' ? 'Gunakan akun BeeCollab Anda' : 'Daftar untuk mulai berkolaborasi'}
         </p>
-        
+
         {error && <div style={{ color: '#d93025', marginBottom: '1.5rem', textAlign: 'center', background: '#fce8e6', padding: '0.75rem', borderRadius: '8px', fontSize: '0.875rem' }}>{error}</div>}
-        
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {mode === 'register' && (
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#3c4043', marginBottom: '0.5rem' }}>FULL NAME</label>
-              <input 
-                type="text" 
-                placeholder="John Doe" 
+              <input
+                type="text"
+                placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }} 
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }}
               />
             </div>
           )}
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#3c4043', marginBottom: '0.5rem' }}>EMAIL ADDRESS</label>
-            <input 
-              type="email" 
-              placeholder="name@example.com" 
+            <input
+              type="email"
+              placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }}
             />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#3c4043', marginBottom: '0.5rem' }}>PASSWORD</label>
-            <input 
-              type="password" 
-              placeholder="••••••••" 
+            <input
+              type="password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }}
             />
           </div>
-          
-          <button 
-            type="submit" 
+
+          <button
+            type="submit"
             disabled={loading}
-            style={{ 
-              marginTop: '0.5rem', 
-              padding: '0.875rem', 
-              borderRadius: '8px', 
-              border: 'none', 
-              background: '#1a73e8', 
-              color: 'white', 
-              fontWeight: 600, 
-              fontSize: '1rem', 
+            style={{
+              marginTop: '0.5rem',
+              padding: '0.875rem',
+              borderRadius: '8px',
+              border: 'none',
+              background: '#1a73e8',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '1rem',
               cursor: loading ? 'default' : 'pointer',
               opacity: loading ? 0.7 : 1
             }}
@@ -137,8 +137,8 @@ export default function AuthPage() {
           {mode === 'login' ? (
             <>
               Belum punya akun?{' '}
-              <button 
-                onClick={() => setMode('register')} 
+              <button
+                onClick={() => setMode('register')}
                 style={{ background: 'none', border: 'none', color: '#1a73e8', fontWeight: 600, cursor: 'pointer', padding: 0 }}
               >
                 Daftar sekarang
@@ -147,8 +147,8 @@ export default function AuthPage() {
           ) : (
             <>
               Sudah punya akun?{' '}
-              <button 
-                onClick={() => setMode('login')} 
+              <button
+                onClick={() => setMode('login')}
                 style={{ background: 'none', border: 'none', color: '#1a73e8', fontWeight: 600, cursor: 'pointer', padding: 0 }}
               >
                 Masuk di sini
@@ -156,10 +156,10 @@ export default function AuthPage() {
             </>
           )}
         </div>
-        
+
         <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-          <button 
-            onClick={() => router.push('/')} 
+          <button
+            onClick={() => router.push('/')}
             style={{ background: 'none', border: 'none', color: '#5f6368', cursor: 'pointer', fontSize: '0.875rem', textDecoration: 'underline' }}
           >
             Back to Home

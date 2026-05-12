@@ -285,7 +285,7 @@ export default function Meeting() {
         osc.start(now);
         osc.stop(now + 0.4);
       }
-      
+
       setTimeout(() => ctx.close(), 1000);
     } catch (e) {
       console.warn('Failed to play sound effect:', e);
@@ -913,7 +913,7 @@ export default function Meeting() {
             setCurrentUserId(meData.id);
             setIsHost(data.hostId === meData.id);
           }
-          
+
           // Once everything is loaded, stop joining state
           setTimeout(() => {
             setIsJoining(false);
@@ -1245,7 +1245,7 @@ export default function Meeting() {
   return (
     <main style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: colors.bgApp, overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
       <style>{mobileStyles}</style>
-      
+
       {isJoining && (
         <div style={{
           position: 'fixed',
@@ -1264,13 +1264,13 @@ export default function Meeting() {
             @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
           `}</style>
           <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ 
-              width: '48px', 
-              height: '48px', 
-              background: '#1a73e8', 
-              borderRadius: '12px', 
-              display: 'flex', 
-              alignItems: 'center', 
+            <div style={{
+              width: '48px',
+              height: '48px',
+              background: '#1a73e8',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(26, 115, 232, 0.3)'
             }}>
@@ -1278,7 +1278,7 @@ export default function Meeting() {
             </div>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1f3b64', margin: 0, letterSpacing: '-0.02em' }}>BeeCollab</h1>
           </div>
-          
+
           <div style={{
             width: '40px',
             height: '40px',
@@ -1288,16 +1288,16 @@ export default function Meeting() {
             animation: 'spin 0.8s linear infinite',
             marginBottom: '1.5rem'
           }}></div>
-          
+
           <div style={{ textAlign: 'center' }}>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#202124', margin: '0 0 0.5rem 0' }}>Sedang bergabung...</h2>
             <p style={{ fontSize: '0.875rem', color: '#5f6368', margin: 0 }}>Menyiapkan kamera dan mikrofon Anda</p>
           </div>
-          
+
           <div style={{ position: 'absolute', bottom: '3rem', display: 'flex', gap: '0.5rem' }}>
-             {[0, 1, 2].map(i => (
-               <div key={i} style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', animation: `bounce 1s infinite ${i * 0.2}s` }}></div>
-             ))}
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', animation: `bounce 1s infinite ${i * 0.2}s` }}></div>
+            ))}
           </div>
         </div>
       )}
@@ -1321,12 +1321,12 @@ export default function Meeting() {
               <div style={{ position: 'relative', width: '36px', height: '36px' }}>
                 <svg width="36" height="36" viewBox="0 0 40 40">
                   <circle cx="20" cy="20" r="18" fill="none" stroke="#e8eaed" strokeWidth="3" />
-                  <circle 
-                    cx="20" cy="20" r="18" 
-                    fill="none" 
-                    stroke="#1a73e8" 
-                    strokeWidth="3" 
-                    strokeDasharray={113.1} 
+                  <circle
+                    cx="20" cy="20" r="18"
+                    fill="none"
+                    stroke="#1a73e8"
+                    strokeWidth="3"
+                    strokeDasharray={113.1}
                     strokeDashoffset={113.1 - (113.1 * countdown / 30)}
                     strokeLinecap="round"
                     style={{ transition: 'stroke-dashoffset 1s linear', transform: 'rotate(-90deg)', transformOrigin: 'center' }}
@@ -1344,26 +1344,26 @@ export default function Meeting() {
           <div style={{ maxWidth: '800px', width: '90%' }}>
             {/* Logo at Top */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#5f6368', marginBottom: '3.5rem' }}>
-               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="#00832d" />
-                </svg>
-                <span style={{ fontWeight: 500, fontSize: '1.6rem', letterSpacing: '-0.02em' }}>BeeCollab</span>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="#00832d" />
+              </svg>
+              <span style={{ fontWeight: 500, fontSize: '1.6rem', letterSpacing: '-0.02em' }}>BeeCollab</span>
             </div>
 
-            <h1 style={{ 
-              fontSize: '2.75rem', 
-              fontWeight: 400, 
-              color: '#202124', 
+            <h1 style={{
+              fontSize: '2.75rem',
+              fontWeight: 400,
+              color: '#202124',
               letterSpacing: '-0.015em',
               lineHeight: '1.25',
               maxWidth: '640px',
               margin: '0 auto 4rem'
             }}>
-              {meetingEndType === 'kicked' ? "You have been removed from the meeting" : 
-               meetingEndType === 'expired' ? "The meeting time has ended" : 
-               "You have ended the meeting for everyone"}
+              {meetingEndType === 'kicked' ? "You have been removed from the meeting" :
+                meetingEndType === 'expired' ? "The meeting time has ended" :
+                  "You have ended the meeting for everyone"}
             </h1>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
               <button
                 onClick={() => router.push('/')}
@@ -1390,9 +1390,9 @@ export default function Meeting() {
               >
                 Return to home screen
               </button>
-              
+
               {meetingEndType === 'kicked' && (
-                <button 
+                <button
                   style={{ background: 'none', border: 'none', color: '#1a73e8', fontSize: '14px', fontWeight: 500, cursor: 'pointer', opacity: 0.8 }}
                   onClick={() => window.location.reload()}
                   onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
@@ -1493,36 +1493,36 @@ export default function Meeting() {
       <div style={{ flex: 1, display: 'flex', position: 'relative', width: '100%', overflow: 'hidden' }}>
 
         {/* Video Grid Area */}
-        <div className="video-grid-container" style={{ 
-          flex: 1, 
-          padding: '1.5rem', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
+        <div className="video-grid-container" style={{
+          flex: 1,
+          padding: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           transition: 'all 0.3s ease',
           overflow: 'hidden',
           background: '#1a1d21'
         }}>
           {hasScreenShare ? (
-            <div style={{ 
-              width: '100%', 
-              height: '100%', 
-              display: 'flex', 
-              gap: '1rem', 
+            <div style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              gap: '1rem',
               flexDirection: window.innerWidth < 1024 ? 'column' : 'row'
             }}>
               {/* Large Screen Share Area */}
-              <div style={{ 
-                flex: 4, 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                flex: 4,
+                display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative'
               }}>
                 {[screenShareItem].map((p: any) => (
-                  <div key={p.id} style={{ 
-                    width: '100%', 
-                    height: '100%', 
+                  <div key={p.id} style={{
+                    width: '100%',
+                    height: '100%',
                     position: 'relative',
                     background: '#000',
                     borderRadius: '16px',
@@ -1545,11 +1545,11 @@ export default function Meeting() {
               </div>
 
               {/* Sidebar for other participants */}
-              <div style={{ 
-                flex: 1, 
-                display: 'flex', 
-                flexDirection: window.innerWidth < 1024 ? 'row' : 'column', 
-                gap: '0.75rem', 
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: window.innerWidth < 1024 ? 'row' : 'column',
+                gap: '0.75rem',
                 overflowX: window.innerWidth < 1024 ? 'auto' : 'hidden',
                 overflowY: window.innerWidth < 1024 ? 'hidden' : 'auto',
                 padding: '0.25rem',
@@ -1565,7 +1565,7 @@ export default function Meeting() {
                   const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
 
                   return (
-                    <div key={p.id} style={{ 
+                    <div key={p.id} style={{
                       flexShrink: 0,
                       width: window.innerWidth < 1024 ? '180px' : '100%',
                       aspectRatio: '16/9',
@@ -1600,9 +1600,9 @@ export default function Meeting() {
               </div>
             </div>
           ) : (
-            <div style={{ 
-              width: '100%', 
-              display: 'grid', 
+            <div style={{
+              width: '100%',
+              display: 'grid',
               gridTemplateColumns: `repeat(${gridInfo.cols}, minmax(0, 1fr))`,
               gap: '1.5rem',
               maxWidth: gridInfo.cols === 1 ? '800px' : '1200px',
@@ -1644,7 +1644,7 @@ export default function Meeting() {
                         {p.name.charAt(0).toUpperCase()}
                       </div>
                     )}
-                    
+
                     <div style={{ position: 'absolute', bottom: '1rem', left: '1rem', right: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
                       <div className="name-badge" style={{ color: 'white', background: 'rgba(0,0,0,0.5)', padding: '4px 12px', borderRadius: '10px', fontSize: '0.85rem', maxWidth: '70%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', backdropFilter: 'blur(4px)' }}>
                         {p.name}
@@ -1698,7 +1698,7 @@ export default function Meeting() {
                     background: #94a3b8;
                   }
                 `}</style>
-                <div 
+                <div
                   ref={chatContainerRef}
                   className="custom-scrollbar"
                   style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
