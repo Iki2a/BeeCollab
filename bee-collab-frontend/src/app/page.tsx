@@ -126,6 +126,7 @@ export default function Home() {
     duration: 60,
     maxParticipants: 10
   });
+  const [newMeetingError, setNewMeetingError] = useState('');
 
   const handleCreateNewMeeting = async () => {
     const token = localStorage.getItem('token');
@@ -133,9 +134,16 @@ export default function Home() {
       router.push('/login');
       return;
     }
+
+    const maxParticipants = Number(newMeetingForm.maxParticipants);
+    if (Number.isNaN(maxParticipants) || maxParticipants < 2 || maxParticipants > 10) {
+      setNewMeetingError('Jumlah peserta harus antara 2 sampai 10.');
+      return;
+    }
     
     setLoading(true);
     setLoadingMessage('Menciptakan ruang pertemuan baru...');
+    setNewMeetingError('');
     
     try {
       const apiBase = getApiBase();
@@ -148,7 +156,7 @@ export default function Home() {
         body: JSON.stringify({
           title: newMeetingForm.title,
           duration: Number(newMeetingForm.duration),
-          maxParticipants: Number(newMeetingForm.maxParticipants)
+          maxParticipants
         })
       });
       if (res.ok) {
@@ -156,12 +164,12 @@ export default function Home() {
         router.push(`/meeting/${data.id}`);
       } else {
         setLoading(false);
-        alert('Gagal membuat meeting. Silakan coba lagi.');
+        setNewMeetingError('Gagal membuat meeting. Silakan coba lagi.');
       }
     } catch (err) {
       console.error(err);
       setLoading(false);
-      alert('Terjadi kesalahan saat membuat meeting.');
+      setNewMeetingError('Terjadi kesalahan saat membuat meeting.');
     }
   };
 
@@ -226,9 +234,14 @@ export default function Home() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Maks. Peserta</label>
-                    <input type="number" value={newMeetingForm.maxParticipants} onChange={e => setNewMeetingForm({ ...newMeetingForm, maxParticipants: parseInt(e.target.value) })} min="2" max="500" style={{ width: '100%', padding: '0.75rem', border: '1px solid #dadce0', borderRadius: '8px', fontSize: '1rem' }} />
+                    <input type="number" value={newMeetingForm.maxParticipants} onChange={e => setNewMeetingForm({ ...newMeetingForm, maxParticipants: parseInt(e.target.value) })} min="2" max="10" style={{ width: '100%', padding: '0.75rem', border: '1px solid #dadce0', borderRadius: '8px', fontSize: '1rem' }} />
                   </div>
                 </div>
+                {newMeetingError && (
+                  <div style={{ color: '#d93025', background: '#fce8e6', border: '1px solid #fad2cf', padding: '0.75rem', borderRadius: '8px', fontSize: '0.875rem' }}>
+                    {newMeetingError}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
                   <button onClick={() => setIsCreating(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', background: 'transparent', cursor: 'pointer', fontWeight: 500, color: '#3c4043' }}>Batal</button>
                   <button onClick={handleCreateNewMeeting} style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#1a73e8', color: 'white', cursor: 'pointer', fontWeight: 500 }}>Buat</button>
@@ -244,6 +257,7 @@ export default function Home() {
                     router.push(`/meeting/${activeMeetingId}`);
                     return;
                   }
+                  setNewMeetingError('');
                   setIsCreating(true);
                 }}
                 title={hasActiveMeeting ? "Lanjutkan meeting aktif" : "Buat meeting baru"}
