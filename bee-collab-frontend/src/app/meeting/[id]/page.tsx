@@ -431,25 +431,10 @@ export default function Meeting() {
       }
     };
 
-    const negotiate = async () => {
+    pc.onnegotiationneeded = async () => {
       try {
         state.makingOffer = true;
-        const offer = await pc.createOffer();
-        // State may have changed while createOffer was pending
-        // (e.g. an incoming offer was processed). If not stable,
-        // wait for stable and retry with a fresh offer.
-        if (pc.signalingState !== 'stable') {
-          state.makingOffer = false;
-          const onStable = () => {
-            if (pc.signalingState === 'stable') {
-              pc.removeEventListener('signalingstatechange', onStable);
-              negotiate();
-            }
-          };
-          pc.addEventListener('signalingstatechange', onStable);
-          return;
-        }
-        await pc.setLocalDescription(offer);
+        await pc.setLocalDescription(await pc.createOffer());
         activeSocket.emit('webrtc:offer', {
           to: targetId,
           from: activeSocket.id,
@@ -461,7 +446,6 @@ export default function Meeting() {
         state.makingOffer = false;
       }
     };
-    pc.onnegotiationneeded = () => negotiate();
 
     pc.ontrack = (event) => {
       const track = event.track;
@@ -557,14 +541,6 @@ export default function Meeting() {
       screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
     }
 
-    // If there are NO local tracks (user joined with cam/mic off), add
-    // recvonly transceivers so onnegotiationneeded still fires and the SDP
-    // includes audio/video m-lines — allowing us to RECEIVE remote streams.
-    if (!pc.getSenders().some((s) => s.track !== null)) {
-      pc.addTransceiver('audio', { direction: 'recvonly' });
-      pc.addTransceiver('video', { direction: 'recvonly' });
-    }
-
     return state;
   };
 
@@ -606,13 +582,7 @@ export default function Meeting() {
         pc.addTrack(videoTrack, stream);
       }
 
-      // Upgrade any recvonly transceivers to sendrecv now that we have
-      // local tracks, so the media actually gets sent to the remote peer.
-      for (const t of pc.getTransceivers()) {
-        if (t.sender.track && t.direction === 'recvonly') {
-          t.direction = 'sendrecv';
-        }
-      }
+
     });
 
     if (!activeSocket) return;
