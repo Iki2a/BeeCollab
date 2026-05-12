@@ -82,6 +82,7 @@ export default function Meeting() {
     isSettingRemoteAnswerPending: boolean;
     polite: boolean;
     pendingIce: RTCIceCandidateInit[];
+    statsIntervalId?: number;
   };
   const peerStateRef = useRef<Record<string, PeerState>>({});
   const remoteStreamsRef = useRef<Record<string, MediaStream[]>>({});
@@ -447,27 +448,76 @@ export default function Meeting() {
     };
 
     pc.ontrack = (event) => {
-      const [streamFromEvent] = event.streams;
-      if (streamFromEvent) {
-        addRemoteStream(targetId, streamFromEvent);
+      const track = event.track;
+      console.log('[webrtc:ontrack]', {
+        peer: targetId,
+        kind: track.kind,
+        id: track.id,
+        readyState: track.readyState,
+      });
+      const trackLabel = track.label?.toLowerCase?.() || '';
+      const trackSettings = track.getSettings?.();
+      const isScreenTrack =
+        track.kind === 'video' &&
+        Boolean(
+          (trackSettings as MediaTrackSettings | undefined)?.displaySurface ||
+          trackLabel.includes('screen') ||
+          trackLabel.includes('window') ||
+          trackLabel.includes('tab'),
+        );
 
-        streamFromEvent.onremovetrack = () => {
-          if (streamFromEvent.getTracks().length === 0) {
-            removeSpecificStream(targetId, streamFromEvent.id);
-          }
-        };
+      const streamsForPeer = remoteStreamsRef.current[targetId] || [];
+      const slotIndex = isScreenTrack ? 1 : 0;
+      const combined = streamsForPeer[slotIndex] || new MediaStream();
 
-        return;
+      if (!combined.getTracks().some((t) => t.id === track.id)) {
+        combined.addTrack(track);
       }
 
-      const existing = (remoteStreamsRef.current[targetId] || [])[0] || new MediaStream();
-      existing.addTrack(event.track);
-      addRemoteStream(targetId, existing);
+      track.onended = () => {
+        try {
+          combined.removeTrack(track);
+        } catch (e) {
+          // Ignore removal errors if track is already detached.
+        }
+        if (combined.getTracks().length === 0) {
+          removeSpecificStream(targetId, combined.id);
+        }
+      };
+
+      const nextStreams = [...streamsForPeer];
+      nextStreams[slotIndex] = combined;
+      remoteStreamsRef.current = { ...remoteStreamsRef.current, [targetId]: nextStreams };
+      setRemoteStreams({ ...remoteStreamsRef.current });
     };
 
     pc.onconnectionstatechange = () => {
       console.log(`Connection state with ${targetId}: ${pc.connectionState}`);
+      if (pc.connectionState === 'connected' && !state.statsIntervalId) {
+        state.statsIntervalId = window.setInterval(async () => {
+          try {
+            const stats = await pc.getStats();
+            stats.forEach((report) => {
+              if (report.type === 'inbound-rtp' && !report.isRemote) {
+                console.log('[webrtc:inbound-rtp]', {
+                  peer: targetId,
+                  kind: report.kind,
+                  bytesReceived: report.bytesReceived,
+                  packetsLost: report.packetsLost,
+                  jitter: report.jitter,
+                });
+              }
+            });
+          } catch (e) {
+            console.warn('[webrtc:getStats] failed', targetId, e);
+          }
+        }, 3000);
+      }
       if (['failed', 'closed'].includes(pc!.connectionState)) {
+        if (state.statsIntervalId) {
+          window.clearInterval(state.statsIntervalId);
+          state.statsIntervalId = undefined;
+        }
         pc!.close();
         delete peerStateRef.current[targetId];
         removeAllRemoteStreams(targetId);
