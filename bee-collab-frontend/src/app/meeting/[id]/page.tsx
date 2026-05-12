@@ -782,37 +782,48 @@ export default function Meeting() {
       refreshMeetingInfo();
     });
     newSocket.on('webrtc:offer', async (payload) => {
-      if (!payload?.from || payload.from === newSocket.id) return;
+      if (!payload?.from || payload.from === newSocket.id || !payload.sdp) return;
 
       const targetId = payload.from;
       const state = createPeerConnection(targetId, newSocket);
       const pc = state.pc;
+      const description = new RTCSessionDescription(payload.sdp);
 
       const offerCollision =
-        state.makingOffer || pc.signalingState !== 'stable';
+        description.type === 'offer' &&
+        (state.makingOffer || pc.signalingState !== 'stable');
 
       state.ignoreOffer = !state.polite && offerCollision;
       if (state.ignoreOffer) return;
 
-      state.isSettingRemoteAnswerPending = payload.sdp?.type === 'answer';
-      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-      state.isSettingRemoteAnswerPending = false;
+      try {
+        if (offerCollision) {
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+            pc.setRemoteDescription(description),
+          ]);
+        } else {
+          await pc.setRemoteDescription(description);
+        }
 
-      if (payload.sdp?.type === 'offer') {
-        await pc.setLocalDescription(await pc.createAnswer());
-        newSocket.emit('webrtc:answer', {
-          to: targetId,
-          from: newSocket.id,
-          sdp: pc.localDescription,
-        });
-      }
+        if (description.type === 'offer') {
+          await pc.setLocalDescription(await pc.createAnswer());
+          newSocket.emit('webrtc:answer', {
+            to: targetId,
+            from: newSocket.id,
+            sdp: pc.localDescription,
+          });
+        }
 
-      if (state.pendingIce.length > 0) {
-        const pending = [...state.pendingIce];
-        state.pendingIce = [];
-        await Promise.all(
-          pending.map((candidate) => pc.addIceCandidate(candidate)),
-        );
+        if (state.pendingIce.length > 0) {
+          const pending = [...state.pendingIce];
+          state.pendingIce = [];
+          await Promise.all(
+            pending.map((candidate) => pc.addIceCandidate(candidate)),
+          );
+        }
+      } catch (err) {
+        console.error('[webrtc:offer] Failed to handle offer', err);
       }
     });
 
