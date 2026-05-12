@@ -432,6 +432,18 @@ export default function Meeting() {
     };
 
     pc.onnegotiationneeded = async () => {
+      // If we're not in stable state (e.g. processing an incoming offer),
+      // defer the negotiation until the state returns to stable.
+      if (pc.signalingState !== 'stable') {
+        const waitForStable = () => {
+          if (pc.signalingState === 'stable') {
+            pc.removeEventListener('signalingstatechange', waitForStable);
+            pc.dispatchEvent(new Event('negotiationneeded'));
+          }
+        };
+        pc.addEventListener('signalingstatechange', waitForStable);
+        return;
+      }
       try {
         state.makingOffer = true;
         await pc.setLocalDescription(await pc.createOffer());
@@ -814,10 +826,13 @@ export default function Meeting() {
 
       try {
         if (offerCollision) {
-          await Promise.all([
-            pc.setLocalDescription({ type: 'rollback' }),
-            pc.setRemoteDescription(description),
-          ]);
+          // Only rollback if we actually have a pending local offer.
+          // makingOffer can be true while signalingState is still 'stable'
+          // (createOffer started but setLocalDescription hasn't been called yet).
+          if (pc.signalingState === 'have-local-offer') {
+            await pc.setLocalDescription({ type: 'rollback' });
+          }
+          await pc.setRemoteDescription(description);
         } else {
           await pc.setRemoteDescription(description);
         }
@@ -851,14 +866,22 @@ export default function Meeting() {
       const pc = state.pc;
       if (pc.signalingState !== 'have-local-offer') return;
 
-      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
 
-      if (state.pendingIce.length > 0) {
-        const pending = [...state.pendingIce];
-        state.pendingIce = [];
-        await Promise.all(
-          pending.map((candidate) => pc.addIceCandidate(candidate)),
-        );
+        if (state.pendingIce.length > 0) {
+          const pending = [...state.pendingIce];
+          state.pendingIce = [];
+          await Promise.all(
+            pending.map((candidate) =>
+              pc.addIceCandidate(candidate).catch((e) =>
+                console.warn('[webrtc:ice] Failed to add queued candidate', e),
+              ),
+            ),
+          );
+        }
+      } catch (err) {
+        console.error('[webrtc:answer] Failed to handle answer', err);
       }
     });
 
