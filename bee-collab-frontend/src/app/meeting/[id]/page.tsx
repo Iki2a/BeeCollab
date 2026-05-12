@@ -10,6 +10,21 @@ import {
   Send, X, Subtitles, MonitorUp, MoreVertical, Info
 } from 'lucide-react';
 
+const getApiBase = () => {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env && env.trim()) return env.replace(/\/+$/, '');
+  if (typeof window === 'undefined') return '';
+  return `http://${window.location.hostname}:3000`;
+};
+
+const getWsBase = () => {
+  const apiBase = getApiBase();
+  if (!apiBase) return '';
+  if (apiBase.startsWith('https://')) return apiBase.replace(/^https:/, 'wss:');
+  if (apiBase.startsWith('http://')) return apiBase.replace(/^http:/, 'ws:');
+  return apiBase;
+};
+
 export default function Meeting() {
   const router = useRouter();
   const params = useParams();
@@ -627,7 +642,7 @@ export default function Meeting() {
     if (!isUuid) {
       const resolveRoomCode = async () => {
         try {
-          const res = await fetch(`http://${window.location.hostname}:3000/meetings/code/${meetingId}`, {
+          const res = await fetch(`${getApiBase()}/meetings/code/${meetingId}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
@@ -643,7 +658,7 @@ export default function Meeting() {
       return;
     }
 
-    const newSocket = io(`ws://${window.location.hostname}:3000/meetings`, {
+    const newSocket = io(`${getWsBase()}/meetings`, {
       auth: { token },
       transports: ['websocket'],
     });
@@ -858,7 +873,7 @@ export default function Meeting() {
     // Fetch meeting details to know if we are the host and resolve names
     async function refreshMeetingInfo() {
       try {
-        const res = await fetch(`http://${window.location.hostname}:3000/meetings/${meetingId}`, {
+        const res = await fetch(`${getApiBase()}/meetings/${meetingId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -890,7 +905,7 @@ export default function Meeting() {
             participantUsers,
           });
           // Check our own user id
-          const meRes = await fetch(`http://${window.location.hostname}:3000/users/me`, {
+          const meRes = await fetch(`${getApiBase()}/users/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (meRes.ok) {
@@ -998,7 +1013,7 @@ export default function Meeting() {
     const checkMeeting = async () => {
       try {
         const res = await fetch(
-          `http://${window.location.hostname}:3000/meetings/${meetingId}`,
+          `${getApiBase()}/meetings/${meetingId}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
 

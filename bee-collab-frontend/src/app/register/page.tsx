@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+const getApiBase = () => {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env && env.trim()) return env.replace(/\/+$/, '');
+  if (typeof window === 'undefined') return '';
+  return `http://${window.location.hostname}:3000`;
+};
+
 export default function Register() {
   const router = useRouter();
   const [name, setName] = useState('');
@@ -23,7 +30,8 @@ export default function Register() {
     setError('');
 
     try {
-      const res = await fetch(`http://${window.location.hostname}:3000/auth/register`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),

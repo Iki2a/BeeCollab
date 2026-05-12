@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import styles from './page.module.css';
 
+const getApiBase = () => {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env && env.trim()) return env.replace(/\/+$/, '');
+  if (typeof window === 'undefined') return '';
+  return `http://${window.location.hostname}:3000`;
+};
+
 export default function Home() {
   const router = useRouter();
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
@@ -18,10 +25,11 @@ export default function Home() {
   const [loadingMessage, setLoadingMessage] = useState('');
 
   useEffect(() => {
+    const apiBase = getApiBase();
     const token = localStorage.getItem('token');
     if (token) {
       setIsLoggedIn(true);
-      fetch(`http://${window.location.hostname}:3000/meetings`, {
+      fetch(`${apiBase}/meetings`, {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then(async res => {
@@ -47,7 +55,7 @@ export default function Home() {
 
     const checkBackend = async () => {
       try {
-        const res = await fetch(`http://${window.location.hostname}:3000/`, { mode: 'cors' });
+        const res = await fetch(`${apiBase}/`, { mode: 'cors' });
         if (res.ok) {
           setServerStatus('online');
           try {
@@ -90,10 +98,11 @@ export default function Home() {
       setLoading(true);
       setLoadingMessage('Menyiapkan ruang pertemuan...');
       
+      const apiBase = getApiBase();
       const token = localStorage.getItem('token');
       try {
         // Resolve code or check if exists first to show loading state
-        const res = await fetch(`http://${window.location.hostname}:3000/meetings/code/${meetingCode.trim()}`, {
+        const res = await fetch(`${apiBase}/meetings/code/${meetingCode.trim()}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -129,7 +138,8 @@ export default function Home() {
     setLoadingMessage('Menciptakan ruang pertemuan baru...');
     
     try {
-      const res = await fetch(`http://${window.location.hostname}:3000/meetings`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/meetings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

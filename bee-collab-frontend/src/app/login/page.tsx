@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+const getApiBase = () => {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env && env.trim()) return env.replace(/\/+$/, '');
+  if (typeof window === 'undefined') return '';
+  return `http://${window.location.hostname}:3000`;
+};
+
 export default function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -29,7 +36,8 @@ export default function AuthPage() {
       : { email, name, password };
 
     try {
-      const res = await fetch(`http://${window.location.hostname}:3000${endpoint}`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
