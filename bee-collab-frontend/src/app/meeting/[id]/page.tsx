@@ -431,22 +431,25 @@ export default function Meeting() {
       }
     };
 
-    pc.onnegotiationneeded = async () => {
-      // If we're not in stable state (e.g. processing an incoming offer),
-      // defer the negotiation until the state returns to stable.
-      if (pc.signalingState !== 'stable') {
-        const waitForStable = () => {
-          if (pc.signalingState === 'stable') {
-            pc.removeEventListener('signalingstatechange', waitForStable);
-            pc.dispatchEvent(new Event('negotiationneeded'));
-          }
-        };
-        pc.addEventListener('signalingstatechange', waitForStable);
-        return;
-      }
+    const negotiate = async () => {
       try {
         state.makingOffer = true;
-        await pc.setLocalDescription(await pc.createOffer());
+        const offer = await pc.createOffer();
+        // State may have changed while createOffer was pending
+        // (e.g. an incoming offer was processed). If not stable,
+        // wait for stable and retry with a fresh offer.
+        if (pc.signalingState !== 'stable') {
+          state.makingOffer = false;
+          const onStable = () => {
+            if (pc.signalingState === 'stable') {
+              pc.removeEventListener('signalingstatechange', onStable);
+              negotiate();
+            }
+          };
+          pc.addEventListener('signalingstatechange', onStable);
+          return;
+        }
+        await pc.setLocalDescription(offer);
         activeSocket.emit('webrtc:offer', {
           to: targetId,
           from: activeSocket.id,
@@ -458,6 +461,7 @@ export default function Meeting() {
         state.makingOffer = false;
       }
     };
+    pc.onnegotiationneeded = () => negotiate();
 
     pc.ontrack = (event) => {
       const track = event.track;
