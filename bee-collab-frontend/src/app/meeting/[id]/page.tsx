@@ -337,7 +337,7 @@ export default function Meeting() {
         height: auto !important;
         max-width: none !important;
         border-radius: 0 !important;
-        z-index: 100 !important;
+        z-index: 200 !important;
       }
       .sidebar-container.sidebar-people {
         position: fixed !important;
@@ -1991,7 +1991,7 @@ export default function Meeting() {
                 <div
                   ref={chatContainerRef}
                   className="custom-scrollbar"
-                  style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
+                  style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
                 >
                   {messages.map((m, i) => {
                     const isMe = m.senderId === localStorage.getItem('token'); // Simplification for demo
@@ -2000,7 +2000,7 @@ export default function Meeting() {
                         <div style={{ width: '34px', height: '34px', borderRadius: '12px', background: '#1f3b64', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.875rem', boxShadow: '0 4px 10px rgba(15, 23, 42, 0.15)' }}>
                           {m.sender?.name?.charAt(0) || 'U'}
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', minWidth: 0 }}>
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
                             {isMe ? (
                               <>
@@ -2014,7 +2014,7 @@ export default function Meeting() {
                               </>
                             )}
                           </div>
-                          <div style={{ background: isMe ? '#214e6f' : '#6f7686', color: 'white', padding: '0.75rem 1rem', borderRadius: '16px', borderTopRightRadius: isMe ? '6px' : '16px', borderTopLeftRadius: !isMe ? '6px' : '16px', fontSize: '0.875rem', lineHeight: '1.5', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.12)' }}>
+                          <div style={{ background: isMe ? '#214e6f' : '#6f7686', color: 'white', padding: '0.75rem 1rem', borderRadius: '16px', borderTopRightRadius: isMe ? '6px' : '16px', borderTopLeftRadius: !isMe ? '6px' : '16px', fontSize: '0.875rem', lineHeight: '1.5', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.12)', wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap', maxWidth: '100%' }}>
                             {m.message}
                           </div>
                         </div>
