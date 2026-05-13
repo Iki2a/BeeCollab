@@ -1140,14 +1140,21 @@ export default function Meeting() {
       } else {
         if (type === 'audio') {
           const audioTrack = stream.getAudioTracks()[0];
-          if (audioTrack) {
-            audioTrack.enabled = newAudioState;
-          } else if (newAudioState) {
-            const audioStream = await navigator.mediaDevices.getUserMedia({
-              audio: getAudioConstraint(),
-              video: false,
-            });
-            stream.addTrack(audioStream.getAudioTracks()[0]);
+          if (newAudioState) {
+            if (!audioTrack) {
+              const audioStream = await navigator.mediaDevices.getUserMedia({
+                audio: getAudioConstraint(),
+                video: false,
+              });
+              stream.addTrack(audioStream.getAudioTracks()[0]);
+            } else {
+              audioTrack.enabled = true;
+            }
+          } else {
+            if (audioTrack) {
+              audioTrack.stop();
+              stream.removeTrack(audioTrack);
+            }
           }
         } else if (type === 'video') {
           const videoTrack = stream.getVideoTracks()[0];
