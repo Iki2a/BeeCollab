@@ -1732,9 +1732,9 @@ export default function Meeting() {
                       transition: 'all 0.2s ease'
                     }}>
                       {p.isLocal ? (
-                        <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }} />
+                        <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                       ) : (
-                        <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
+                        <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                       )}
                       {!isVideoEnabled && (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#2c3e50', color: 'white', fontSize: '1.2rem', fontWeight: 600 }}>
@@ -1789,9 +1789,9 @@ export default function Meeting() {
                     width: '100%'
                   }}>
                     {p.isLocal ? (
-                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }} />
+                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                     ) : (
-                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
+                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                     )}
                     {!isVideoEnabled && (
                       <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '2px solid rgba(255,255,255,0.1)' }}>
