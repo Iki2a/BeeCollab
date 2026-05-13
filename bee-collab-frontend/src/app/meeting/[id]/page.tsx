@@ -1567,7 +1567,7 @@ export default function Meeting() {
             }}>
               {meetingEndType === 'kicked' ? "You have been removed from the meeting" :
                 meetingEndType === 'expired' ? "The meeting time has ended" :
-                  "You have ended the meeting for everyone"}
+                  "Host has ended the meeting for everyone"}
             </h1>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
