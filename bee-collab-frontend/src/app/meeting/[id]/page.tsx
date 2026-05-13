@@ -558,14 +558,32 @@ export default function Meeting() {
       const senders = pc.getSenders();
       const screenTrack = screenStreamRef.current?.getVideoTracks()[0];
 
-      // Only match senders that already have an active track.
-      // Do NOT fall back to transceiver senders with null tracks — those
-      // are from the remote offer and using replaceTrack on them won't
-      // trigger renegotiation (direction stays recvonly).  Letting the
-      // code fall through to addTrack will reuse the transceiver, flip
-      // direction to sendrecv, and fire onnegotiationneeded properly.
-      const audioSender = senders.find(s => s.track?.kind === 'audio');
-      const videoSender = senders.find(s => s.track?.kind === 'video' && s.track !== screenTrack);
+      // 1) First, try to find senders that already have an active track.
+      let audioSender = senders.find(s => s.track?.kind === 'audio');
+      let videoSender = senders.find(s => s.track?.kind === 'video' && s.track !== screenTrack);
+
+      // 2) If not found, check for transceivers that WERE previously sending
+      //    (direction=sendrecv) but now have null tracks (cam/mic toggled off).
+      //    Safe to replaceTrack on these — direction is already sendrecv.
+      //    Skip recvonly transceivers (from remote offer) — those need addTrack
+      //    to flip direction and trigger renegotiation.
+      if (!audioSender) {
+        const t = pc.getTransceivers().find(t =>
+          t.receiver.track.kind === 'audio' &&
+          t.sender.track === null &&
+          (t.direction === 'sendrecv' || t.direction === 'sendonly'),
+        );
+        if (t) audioSender = t.sender;
+      }
+      if (!videoSender) {
+        const t = pc.getTransceivers().find(t =>
+          t.receiver.track.kind === 'video' &&
+          t.sender.track === null &&
+          t.sender !== senders.find(s => s.track === screenTrack) &&
+          (t.direction === 'sendrecv' || t.direction === 'sendonly'),
+        );
+        if (t) videoSender = t.sender;
+      }
 
       if (audioSender) {
         audioSender.replaceTrack(audioTrack);
@@ -1142,6 +1160,7 @@ export default function Meeting() {
           const audioTrack = stream.getAudioTracks()[0];
           if (newAudioState) {
             if (!audioTrack) {
+              // First time enabling — need a new track
               const audioStream = await navigator.mediaDevices.getUserMedia({
                 audio: getAudioConstraint(),
                 video: false,
@@ -1152,14 +1171,14 @@ export default function Meeting() {
             }
           } else {
             if (audioTrack) {
-              audioTrack.stop();
-              stream.removeTrack(audioTrack);
+              audioTrack.enabled = false;
             }
           }
         } else if (type === 'video') {
           const videoTrack = stream.getVideoTracks()[0];
           if (newVideoState) {
             if (!videoTrack) {
+              // First time enabling — need a new track
               const videoStream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
                 video: getVideoConstraint(),
@@ -1170,8 +1189,7 @@ export default function Meeting() {
             }
           } else {
             if (videoTrack) {
-              videoTrack.stop();
-              stream.removeTrack(videoTrack);
+              videoTrack.enabled = false;
             }
           }
         }
