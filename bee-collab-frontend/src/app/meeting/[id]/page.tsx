@@ -442,6 +442,19 @@ export default function Meeting() {
         });
       } catch (err) {
         console.error(err);
+        // If negotiation failed (e.g. due to collision with incoming offer),
+        // retry once when the signaling state returns to stable.
+        if (pc.signalingState !== 'closed') {
+          const retryOnStable = () => {
+            if (pc.signalingState === 'stable') {
+              pc.removeEventListener('signalingstatechange', retryOnStable);
+              // Re-trigger negotiation — dispatchEvent won't call onnegotiationneeded
+              // property handler, so call it directly.
+              pc.onnegotiationneeded?.(new Event('negotiationneeded'));
+            }
+          };
+          pc.addEventListener('signalingstatechange', retryOnStable);
+        }
       } finally {
         state.makingOffer = false;
       }
@@ -1160,7 +1173,6 @@ export default function Meeting() {
           const audioTrack = stream.getAudioTracks()[0];
           if (newAudioState) {
             if (!audioTrack) {
-              // First time enabling — need a new track
               const audioStream = await navigator.mediaDevices.getUserMedia({
                 audio: getAudioConstraint(),
                 video: false,
@@ -1171,14 +1183,14 @@ export default function Meeting() {
             }
           } else {
             if (audioTrack) {
-              audioTrack.enabled = false;
+              audioTrack.stop();
+              stream.removeTrack(audioTrack);
             }
           }
         } else if (type === 'video') {
           const videoTrack = stream.getVideoTracks()[0];
           if (newVideoState) {
             if (!videoTrack) {
-              // First time enabling — need a new track
               const videoStream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
                 video: getVideoConstraint(),
@@ -1189,7 +1201,8 @@ export default function Meeting() {
             }
           } else {
             if (videoTrack) {
-              videoTrack.enabled = false;
+              videoTrack.stop();
+              stream.removeTrack(videoTrack);
             }
           }
         }
@@ -1515,7 +1528,7 @@ export default function Meeting() {
             }}>
               {meetingEndType === 'kicked' ? "You have been removed from the meeting" :
                 meetingEndType === 'expired' ? "The meeting time has ended" :
-                  "Host has ended the meeting for everyone"}
+                  "You have ended the meeting for everyone"}
             </h1>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
@@ -1732,9 +1745,9 @@ export default function Meeting() {
                       transition: 'all 0.2s ease'
                     }}>
                       {p.isLocal ? (
-                        <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }} />
+                        <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                       ) : (
-                        <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
+                        <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                       )}
                       {!isVideoEnabled && (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#2c3e50', color: 'white', fontSize: '1.2rem', fontWeight: 600 }}>
@@ -1789,9 +1802,9 @@ export default function Meeting() {
                     width: '100%'
                   }}>
                     {p.isLocal ? (
-                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', display: isVideoEnabled ? 'block' : 'none' }} />
+                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                     ) : (
-                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
+                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
                     )}
                     {!isVideoEnabled && (
                       <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '2px solid rgba(255,255,255,0.1)' }}>
