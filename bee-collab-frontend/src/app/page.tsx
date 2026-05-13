@@ -23,6 +23,7 @@ export default function Home() {
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const apiBase = getApiBase();
@@ -85,13 +86,17 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleLogout = () => {
+  const performLogout = () => {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
     setHasActiveMeeting(false);
     setActiveMeetingId(null);
+    setShowLogoutConfirm(false);
     router.refresh();
   };
+
+  // Silent logout for invalid-token (401) cases — no confirmation needed
+  const handleLogout = performLogout;
 
   const handleJoin = async () => {
     if (meetingCode.trim()) {
@@ -195,7 +200,7 @@ export default function Home() {
           {isLoggedIn ? (
             <button
               className={styles.logoutBtn}
-              onClick={handleLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               style={{ background: 'none', border: '1px solid #dadce0', color: '#d93025', fontWeight: 500, fontSize: '14px', cursor: 'pointer', padding: '8px 16px', borderRadius: '4px' }}
             >
               Logout
@@ -322,6 +327,57 @@ export default function Home() {
         <div className={`${styles.statusDot} ${styles[serverStatus]}`}></div>
         <span>{serverStatus === 'checking' ? 'Connecting to server...' : serverStatus === 'online' ? 'System Online' : 'System Offline'}</span>
       </div>
+
+      {showLogoutConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowLogoutConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              padding: '1.5rem',
+              borderRadius: '14px',
+              width: '100%',
+              maxWidth: '380px',
+              boxShadow: '0 12px 30px rgba(0,0,0,0.2)'
+            }}
+          >
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#202124', fontWeight: 600 }}>
+              Keluar dari BeeCollab?
+            </h3>
+            <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.875rem', color: '#5f6368', lineHeight: 1.5 }}>
+              Anda akan keluar dari akun ini. Anda perlu masuk lagi untuk melanjutkan.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: '1px solid #dadce0', background: 'transparent', cursor: 'pointer', fontWeight: 500, color: '#3c4043', fontSize: '0.875rem' }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={performLogout}
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: '#d93025', color: 'white', cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem' }}
+              >
+                Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div style={{
