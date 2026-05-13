@@ -54,6 +54,7 @@ export default function Meeting() {
   } | null>(null);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isLeaveMenuOpen, setIsLeaveMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({});
@@ -113,6 +114,25 @@ export default function Meeting() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [openParticipantMenuUserId]);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const isMenu = target.closest('[data-kebab-menu="true"]');
+      const isButton = target.closest('[data-kebab-menu-button="true"]');
+      if (!isMenu && !isButton) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMoreMenuOpen]);
 
   useEffect(() => {
     if (!meetingEnded || meetingEndType === 'kicked') return;
@@ -310,13 +330,28 @@ export default function Meeting() {
         max-width: 100% !important;
         max-height: 30vh !important;
       }
-      .sidebar-container {
-        position: absolute !important;
-        top: 0 !important;
-        right: 0 !important;
-        width: 100% !important;
-        height: calc(100% - 80px) !important;
-        z-index: 50 !important;
+      .sidebar-container.sidebar-chat {
+        position: fixed !important;
+        inset: 0 !important;
+        width: auto !important;
+        height: auto !important;
+        max-width: none !important;
+        border-radius: 0 !important;
+        z-index: 100 !important;
+      }
+      .sidebar-container.sidebar-people {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translate(-50%, -50%) !important;
+        width: calc(100% - 2rem) !important;
+        max-width: 480px !important;
+        height: 70vh !important;
+        max-height: calc(100vh - 8rem) !important;
+        border-radius: 20px !important;
+        border-left: none !important;
+        z-index: 100 !important;
       }
       .bottom-bar {
         padding: 0 0.5rem !important;
@@ -330,26 +365,30 @@ export default function Meeting() {
       .bottom-bar-actions {
         display: none !important;
       }
+      .top-bar {
+        display: flex !important;
+      }
+      .screen-share-btn {
+        display: none !important;
+      }
+      .mobile-action-btn {
+        display: flex !important;
+      }
+      .mobile-menu-item {
+        display: block !important;
+      }
       .controls-container {
-        gap: 0.5rem !important;
+        gap: 0.4rem !important;
         flex: 1 !important;
         justify-content: center !important;
       }
       .control-btn {
-        width: 40px !important;
-        height: 40px !important;
+        width: 38px !important;
+        height: 38px !important;
       }
       .control-btn svg {
         width: 18px !important;
         height: 18px !important;
-      }
-      .leave-btn {
-        width: 50px !important;
-        padding: 0 !important;
-        justify-content: center !important;
-      }
-      .leave-btn span {
-        display: none !important;
       }
       .name-badge-container {
         bottom: 0.5rem !important;
@@ -1643,6 +1682,103 @@ export default function Meeting() {
         </div>
       )}
 
+      {/* Top bar (mobile only — desktop layout is unchanged) */}
+      <div className="top-bar" style={{
+        display: 'none',
+        height: '52px',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 0.75rem',
+        background: '#1a1d21',
+        color: 'white',
+        flexShrink: 0,
+        zIndex: 30,
+        borderBottom: '1px solid rgba(255,255,255,0.08)'
+      }}>
+        <button
+          onClick={() => setIsInfoOpen(true)}
+          aria-label="Meeting info"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: 'rgba(255,255,255,0.08)',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '0.4rem 0.7rem',
+            color: 'white',
+            cursor: 'pointer',
+            maxWidth: 'calc(100% - 60px)',
+            minWidth: 0,
+            overflow: 'hidden'
+          }}
+        >
+          <Info size={16} style={{ flexShrink: 0 }} />
+          <span style={{
+            fontSize: '0.85rem',
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {meetingInfo?.title || 'Meeting'}
+          </span>
+        </button>
+
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => setIsLeaveMenuOpen((prev) => !prev)}
+            aria-label="Leave meeting"
+            style={{
+              background: colors.red,
+              border: 'none',
+              color: 'white',
+              width: '56px',
+              height: '40px',
+              borderRadius: '999px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <PhoneOff size={18} />
+          </button>
+          {isLeaveMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              right: 0,
+              top: '46px',
+              background: '#1f2937',
+              color: 'white',
+              padding: '0.5rem',
+              borderRadius: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+              minWidth: '160px',
+              boxShadow: '0 10px 24px rgba(0,0,0,0.3)',
+              zIndex: 50
+            }}>
+              {isHost && (
+                <button onClick={() => {
+                  if (socket) socket.emit('meeting:end', { meetingId });
+                  setIsLeaveMenuOpen(false);
+                }} style={{ background: '#dc2626', border: 'none', color: 'white', borderRadius: '10px', padding: '0.5rem 0.75rem', cursor: 'pointer', fontWeight: 600 }}>
+                  End Meeting
+                </button>
+              )}
+              <button onClick={() => {
+                setIsLeaveMenuOpen(false);
+                router.push('/');
+              }} style={{ background: '#374151', border: 'none', color: 'white', borderRadius: '10px', padding: '0.5rem 0.75rem', cursor: 'pointer', fontWeight: 600 }}>
+                Leave Meeting
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Main Content Area (Takes remaining space above bottom bar) */}
       <div style={{ flex: 1, display: 'flex', position: 'relative', width: '100%', overflow: 'hidden' }}>
 
@@ -1824,7 +1960,7 @@ export default function Meeting() {
 
         {/* Sidebar */}
         {activeTab && (
-          <div className="sidebar-container" style={{ width: '360px', background: 'linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%)', color: '#2b2f38', display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(0,0,0,0.06)', flexShrink: 0, zIndex: 10, boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)', borderTopLeftRadius: '24px', borderBottomLeftRadius: '24px', overflow: 'hidden' }}>
+          <div className={`sidebar-container sidebar-${activeTab}`} style={{ width: '360px', background: 'linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%)', color: '#2b2f38', display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(0,0,0,0.06)', flexShrink: 0, zIndex: 10, boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)', borderTopLeftRadius: '24px', borderBottomLeftRadius: '24px', overflow: 'hidden' }}>
             <div style={{ display: 'flex', padding: '1.1rem 1.25rem', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
               <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1f3b64' }}>
                 {activeTab === 'people' ? `Participants (${participants.length})` : 'Chat'}
@@ -2057,12 +2193,74 @@ export default function Meeting() {
           <button onClick={toggleHandRaise} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isHandRaised ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             {isHandRaised ? <Hand size={20} /> : <Hand size={20} />}
           </button>
-          <button onClick={toggleScreenShare} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isScreenSharing ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
+          <button onClick={toggleScreenShare} className="control-btn screen-share-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isScreenSharing ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             <MonitorUp size={20} />
           </button>
-          <button onClick={() => setIsDeviceSettingsOpen(true)} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
-            <MoreVertical size={20} />
+
+          {/* Mobile-only inline buttons (chat + people). Hidden on desktop via inline style; shown via mobile CSS. */}
+          <button
+            onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')}
+            className="control-btn mobile-action-btn"
+            aria-label="Chat"
+            style={{ display: 'none', width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', background: activeTab === 'chat' ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}
+          >
+            <MessageSquare size={20} />
           </button>
+          <button
+            onClick={() => setActiveTab(activeTab === 'people' ? null : 'people')}
+            className="control-btn mobile-action-btn"
+            aria-label="People"
+            style={{ display: 'none', position: 'relative', width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', background: activeTab === 'people' ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}
+          >
+            <Users size={20} />
+            <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#8ab4f8', color: '#202124', fontSize: '0.6rem', fontWeight: 'bold', minWidth: '14px', height: '14px', padding: '0 3px', borderRadius: '999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {displayParticipants.length}
+            </span>
+          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              data-kebab-menu-button="true"
+              onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+              className="control-btn"
+              style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}
+            >
+              <MoreVertical size={20} />
+            </button>
+            {isMoreMenuOpen && (
+              <div data-kebab-menu="true" style={{
+                position: 'absolute',
+                bottom: '52px',
+                right: 0,
+                background: '#1f2937',
+                color: 'white',
+                padding: '0.5rem',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem',
+                minWidth: '180px',
+                boxShadow: '0 10px 24px rgba(0,0,0,0.3)',
+                zIndex: 50
+              }}>
+                <button onClick={() => {
+                  setIsDeviceSettingsOpen(true);
+                  setIsMoreMenuOpen(false);
+                }} style={{ background: 'none', border: 'none', color: 'white', padding: '0.55rem 0.75rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}>
+                  Settings
+                </button>
+                <button
+                  className="mobile-menu-item"
+                  onClick={() => {
+                    toggleScreenShare();
+                    setIsMoreMenuOpen(false);
+                  }}
+                  style={{ display: 'none', background: 'none', border: 'none', color: 'white', padding: '0.55rem 0.75rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}
+                >
+                  {isScreenSharing ? 'Stop sharing' : 'Screen share'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="bottom-bar-actions" style={{ width: '250px', display: 'flex', justifyContent: 'flex-end', gap: '1rem', color: '#e4e6ea', position: 'relative' }}>
@@ -2074,7 +2272,7 @@ export default function Meeting() {
             </span>
           </button>
           <button onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')} style={{ background: 'none', border: 'none', color: activeTab === 'chat' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}><MessageSquare size={20} /></button>
-          <button onClick={() => setIsLeaveMenuOpen((prev) => !prev)} title="Leave options" className="leave-btn" style={{ background: colors.red, border: 'none', color: 'white', cursor: 'pointer', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={() => setIsLeaveMenuOpen((prev) => !prev)} title="Leave options" className="leave-btn" style={{ background: colors.red, border: 'none', color: 'white', cursor: 'pointer', width: '64px', height: '44px', borderRadius: '999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <PhoneOff size={20} />
           </button>
           {isLeaveMenuOpen && (
