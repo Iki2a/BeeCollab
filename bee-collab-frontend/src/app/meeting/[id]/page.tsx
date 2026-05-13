@@ -1160,7 +1160,6 @@ export default function Meeting() {
           const audioTrack = stream.getAudioTracks()[0];
           if (newAudioState) {
             if (!audioTrack) {
-              // First time enabling — need a new track
               const audioStream = await navigator.mediaDevices.getUserMedia({
                 audio: getAudioConstraint(),
                 video: false,
@@ -1171,14 +1170,14 @@ export default function Meeting() {
             }
           } else {
             if (audioTrack) {
-              audioTrack.enabled = false;
+              audioTrack.stop();
+              stream.removeTrack(audioTrack);
             }
           }
         } else if (type === 'video') {
           const videoTrack = stream.getVideoTracks()[0];
           if (newVideoState) {
             if (!videoTrack) {
-              // First time enabling — need a new track
               const videoStream = await navigator.mediaDevices.getUserMedia({
                 audio: false,
                 video: getVideoConstraint(),
@@ -1189,7 +1188,8 @@ export default function Meeting() {
             }
           } else {
             if (videoTrack) {
-              videoTrack.enabled = false;
+              videoTrack.stop();
+              stream.removeTrack(videoTrack);
             }
           }
         }
