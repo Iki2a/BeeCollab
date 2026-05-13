@@ -442,6 +442,19 @@ export default function Meeting() {
         });
       } catch (err) {
         console.error(err);
+        // If negotiation failed (e.g. due to collision with incoming offer),
+        // retry once when the signaling state returns to stable.
+        if (pc.signalingState !== 'closed') {
+          const retryOnStable = () => {
+            if (pc.signalingState === 'stable') {
+              pc.removeEventListener('signalingstatechange', retryOnStable);
+              // Re-trigger negotiation — dispatchEvent won't call onnegotiationneeded
+              // property handler, so call it directly.
+              pc.onnegotiationneeded?.(new Event('negotiationneeded'));
+            }
+          };
+          pc.addEventListener('signalingstatechange', retryOnStable);
+        }
       } finally {
         state.makingOffer = false;
       }
