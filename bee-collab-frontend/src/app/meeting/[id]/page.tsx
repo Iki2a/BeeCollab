@@ -403,6 +403,29 @@ export default function Meeting() {
         overflow: hidden !important;
         text-overflow: ellipsis !important;
       }
+      .meeting-ended-countdown {
+        top: 1rem !important;
+        left: 1rem !important;
+        gap: 8px !important;
+      }
+      .meeting-ended-countdown span {
+        display: none !important;
+      }
+      .meeting-ended-logo {
+        margin-bottom: 2rem !important;
+      }
+      .meeting-ended-logo svg {
+        width: 28px !important;
+        height: 28px !important;
+      }
+      .meeting-ended-logo span {
+        font-size: 1.25rem !important;
+      }
+      .meeting-ended-title {
+        font-size: 1.5rem !important;
+        line-height: 1.3 !important;
+        margin: 0 auto 2rem !important;
+      }
     }
   `;
 
@@ -652,8 +675,6 @@ export default function Meeting() {
         if (playPromise !== undefined) {
           playPromise.catch(err => {
             if (err.name === 'NotAllowedError') {
-              // Browser menge-block autoplay (karena blm ada interaksi user & video tidak di mute)
-              // Tampilkan popup agar user bisa klik
               setShowAutoplayOverlay(true);
             }
           });
@@ -704,12 +725,12 @@ export default function Meeting() {
 
     const isAnyoneElseSharingScreen = Object.values(remoteStreams).some(streams => streams.length > 1);
     if (isAnyoneElseSharingScreen) {
-      alert('Orang lain sedang melakukan presentasi. Anda tidak dapat share screen saat ini.');
+      alert('Someone else is presenting. You cannot share screen at this time.');
       return;
     }
 
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      alert('Browser tidak mendukung screen sharing.');
+      alert('Browser does not support screen sharing.');
       return;
     }
 
@@ -938,7 +959,7 @@ export default function Meeting() {
     });
 
     newSocket.on('meeting:ended', (data) => {
-      const reason = data?.reason || 'Pertemuan telah diakhiri oleh host.';
+      const reason = data?.reason || 'The meeting has been ended by the host.';
       setMeetingEndedReason(reason);
       if (reason.toLowerCase().includes('durasi') || reason.toLowerCase().includes('habis') || reason.toLowerCase().includes('time')) {
         setMeetingEndType('expired');
@@ -949,7 +970,7 @@ export default function Meeting() {
     });
 
     newSocket.on('meeting:kicked', (payload) => {
-      const reason = payload?.reason || 'Anda dikeluarkan dari meeting.';
+      const reason = payload?.reason || 'You have been removed from the meeting.';
       setMeetingEndedReason(reason);
       setMeetingEndType('kicked');
       setMeetingEnded(true);
@@ -962,7 +983,7 @@ export default function Meeting() {
     });
 
     newSocket.on('media:ask-unmute', () => {
-      const agree = window.confirm('Host meminta Anda menyalakan mic. Nyalakan sekarang?');
+      const agree = window.confirm('The host is asking you to unmute. Unmute now?');
       if (agree && !mediaEnabledRef.current.audio) {
         toggleMedia('audio');
       }
@@ -1162,7 +1183,7 @@ export default function Meeting() {
         );
 
         if (res.status === 404) {
-          setMeetingEndedReason('Pertemuan telah berakhir.');
+          setMeetingEndedReason('The meeting has ended.');
           setMeetingEnded(true);
         }
       } catch (e) {
@@ -1181,7 +1202,7 @@ export default function Meeting() {
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        alert('Browser tidak mendukung akses kamera/mic atau halaman tidak HTTPS.');
+        alert('Browser does not support camera/mic access, or the page is not served over HTTPS.');
         return;
       }
 
@@ -1246,7 +1267,7 @@ export default function Meeting() {
       }
     } catch (err) {
       console.error('Error accessing media devices.', err);
-      alert('Gagal mengakses kamera/mic.');
+      alert('Failed to access camera/mic.');
     }
   };
 
@@ -1323,7 +1344,7 @@ export default function Meeting() {
   }, {});
 
   const displayParticipants = [
-    { isLocal: true, name: 'Anda', id: 'local' },
+    { isLocal: true, name: 'You', id: 'local' },
     ...remoteParticipants.map(p => ({ isLocal: false, name: p.user?.name || `User ${p.socketId?.substring(0, 5)}`, id: p.socketId }))
   ];
 
@@ -1341,10 +1362,10 @@ export default function Meeting() {
   const displayItems: DisplayItem[] = [];
 
   // Add local camera
-  displayItems.push({ isLocal: true, name: 'Anda', id: 'local', type: 'camera' });
+  displayItems.push({ isLocal: true, name: 'You', id: 'local', type: 'camera' });
   // Add local screen share if active
   if (isScreenSharing) {
-    displayItems.push({ isLocal: true, name: 'Anda (Presentasi)', id: 'local-screen', type: 'screen' });
+    displayItems.push({ isLocal: true, name: 'You (Presenting)', id: 'local-screen', type: 'screen' });
   }
 
   remoteParticipants.forEach(p => {
@@ -1368,7 +1389,7 @@ export default function Meeting() {
       if (!isScreenLive) return;
       displayItems.push({
         isLocal: false,
-        name: resolvedName + ' (Presentasi)',
+        name: resolvedName + ' (Presenting)',
         id: p.socketId + '-screen',
         originalId: p.socketId,
         type: 'screen',
@@ -1407,28 +1428,24 @@ export default function Meeting() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'fadeIn 0.3s ease-out'
+          justifyContent: 'center'
         }}>
           <style>{`
-            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
             @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
           `}</style>
-          <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              background: '#1a73e8',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(26, 115, 232, 0.3)'
-            }}>
-              <Video size={28} color="white" />
-            </div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1f3b64', margin: 0, letterSpacing: '-0.02em' }}>BeeCollab</h1>
+          <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="#00832d" />
+              <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="url(#joiningLogoGradient)" />
+              <defs>
+                <linearGradient id="joiningLogoGradient" x1="12" y1="6" x2="12" y2="18" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#00E676" />
+                  <stop offset="1" stopColor="#00C853" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1f3b64', margin: 0, letterSpacing: '-0.02em' }}>BeeCollab</h1>
           </div>
 
           <div style={{
@@ -1442,8 +1459,8 @@ export default function Meeting() {
           }}></div>
 
           <div style={{ textAlign: 'center' }}>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#202124', margin: '0 0 0.5rem 0' }}>Sedang bergabung...</h2>
-            <p style={{ fontSize: '0.875rem', color: '#5f6368', margin: 0 }}>Menyiapkan kamera dan mikrofon Anda</p>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#202124', margin: '0 0 0.5rem 0' }}>Joining meeting...</h2>
+            <p style={{ fontSize: '0.875rem', color: '#5f6368', margin: 0 }}>Please wait a moment...</p>
           </div>
 
           <div style={{ position: 'absolute', bottom: '3rem', display: 'flex', gap: '0.5rem' }}>
@@ -1495,7 +1512,7 @@ export default function Meeting() {
         </div>
       )}
       {meetingEnded && (
-        <div style={{
+        <div className="meeting-ended-overlay" style={{
           position: 'fixed',
           inset: 0,
           background: '#ffffff',
@@ -1506,11 +1523,12 @@ export default function Meeting() {
           justifyContent: 'center',
           color: '#202124',
           textAlign: 'center',
+          padding: '1.5rem',
           fontFamily: "'Google Sans', Roboto, Arial, sans-serif"
         }}>
           {/* Top Left Countdown */}
           {meetingEndType !== 'kicked' && (
-            <div style={{ position: 'absolute', top: '2rem', left: '2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="meeting-ended-countdown" style={{ position: 'absolute', top: '2rem', left: '2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ position: 'relative', width: '36px', height: '36px' }}>
                 <svg width="36" height="36" viewBox="0 0 40 40">
                   <circle cx="20" cy="20" r="18" fill="none" stroke="#e8eaed" strokeWidth="3" />
@@ -1536,14 +1554,14 @@ export default function Meeting() {
           {/* Main Content */}
           <div style={{ maxWidth: '800px', width: '90%' }}>
             {/* Logo at Top */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#5f6368', marginBottom: '3.5rem' }}>
+            <div className="meeting-ended-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#5f6368', marginBottom: '3.5rem' }}>
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="#00832d" />
               </svg>
               <span style={{ fontWeight: 500, fontSize: '1.6rem', letterSpacing: '-0.02em' }}>BeeCollab</span>
             </div>
 
-            <h1 style={{
+            <h1 className="meeting-ended-title" style={{
               fontSize: '2.75rem',
               fontWeight: 400,
               color: '#202124',
@@ -1602,18 +1620,18 @@ export default function Meeting() {
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 45, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'white', padding: '1.5rem', borderRadius: '14px', width: '90%', maxWidth: '360px', boxShadow: '0 12px 30px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1rem', color: '#202124' }}>Info Meeting</h3>
+              <h3 style={{ margin: 0, fontSize: '1rem', color: '#202124' }}>Meeting Info</h3>
               <button onClick={() => setIsInfoOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5f6368' }} aria-label="Close info">
                 <X size={18} />
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', color: '#3c4043' }}>
               <div>
-                <div style={{ fontSize: '0.75rem', color: '#5f6368' }}>Nama meeting</div>
+                <div style={{ fontSize: '0.75rem', color: '#5f6368' }}>Meeting name</div>
                 <div style={{ fontWeight: 600 }}>{meetingInfo?.title || 'Meeting'}</div>
               </div>
               <div>
-                <div style={{ fontSize: '0.75rem', color: '#5f6368' }}>Code meeting</div>
+                <div style={{ fontSize: '0.75rem', color: '#5f6368' }}>Meeting code</div>
                 <div style={{ fontWeight: 600, fontFamily: 'monospace' }}>{meetingInfo?.roomCode || meetingId}</div>
               </div>
             </div>
@@ -1723,6 +1741,19 @@ export default function Meeting() {
           }}>
             {meetingInfo?.title || 'Meeting'}
           </span>
+          <span
+            aria-label={isConnected ? 'Connected' : 'Connecting'}
+            title={isConnected ? 'Connected' : 'Connecting...'}
+            style={{
+              flexShrink: 0,
+              display: 'inline-block',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: isConnected ? '#22c55e' : '#eab308',
+              boxShadow: isConnected ? '0 0 6px rgba(34, 197, 94, 0.6)' : '0 0 6px rgba(234, 179, 8, 0.6)'
+            }}
+          />
         </button>
 
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -2005,7 +2036,7 @@ export default function Meeting() {
                             {isMe ? (
                               <>
                                 <span style={{ fontSize: '0.75rem', color: '#8f95a3' }}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                <strong style={{ fontSize: '0.875rem', color: '#4a4d55' }}>Anda</strong>
+                                <strong style={{ fontSize: '0.875rem', color: '#4a4d55' }}>You</strong>
                               </>
                             ) : (
                               <>
@@ -2028,7 +2059,7 @@ export default function Meeting() {
                       type="text"
                       value={chatInput}
                       onChange={e => setChatInput(e.target.value)}
-                      placeholder="Ketik pesan..."
+                      placeholder="Type a message..."
                       style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#111827', fontSize: '0.9rem' }}
                     />
                     <button type="submit" disabled={!chatInput.trim()} style={{ background: chatInput.trim() ? '#1f3b64' : '#e5e7eb', border: 'none', cursor: chatInput.trim() ? 'pointer' : 'default', color: chatInput.trim() ? 'white' : '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', borderRadius: '12px' }}>
@@ -2036,7 +2067,7 @@ export default function Meeting() {
                     </button>
                   </div>
                   <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.65rem', color: '#8f95a3' }}>
-                    Pesan hanya dapat dilihat oleh peserta dalam panggilan
+                    Messages can only be seen by participants in this call
                   </div>
                 </form>
               </>
@@ -2054,7 +2085,7 @@ export default function Meeting() {
                     style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '0.85rem', outline: 'none', background: '#ffffff' }}
                   />
                 </div>
-                {participants.length === 0 && <p style={{ color: '#8f95a3', fontSize: '0.875rem', marginTop: '1rem' }}>Menunggu orang lain bergabung...</p>}
+                {participants.length === 0 && <p style={{ color: '#8f95a3', fontSize: '0.875rem', marginTop: '1rem' }}>Waiting for others to join...</p>}
                 {[...participants]
                   .sort((a, b) => {
                     const isAHost = meetingInfo?.hostId === a.userId;
@@ -2099,7 +2130,7 @@ export default function Meeting() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#374151' }}>
-                            {isMe ? 'Anda (You)' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && '✋'}
+                            {isMe ? 'You' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && '✋'}
                           </span>
                         </div>
                         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
@@ -2305,8 +2336,8 @@ export default function Meeting() {
               <Video size={32} />
             </div>
             <div>
-              <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem' }}>Siap untuk Bergabung?</h2>
-              <p style={{ margin: 0, color: '#8f95a3', fontSize: '0.875rem', lineHeight: '1.5' }}>Browser memblokir suara otomatis. Klik tombol di bawah untuk mengaktifkan audio dan video.</p>
+              <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem' }}>Ready to Join?</h2>
+              <p style={{ margin: 0, color: '#8f95a3', fontSize: '0.875rem', lineHeight: '1.5' }}>The browser blocked autoplay. Click the button below to enable audio and video.</p>
             </div>
             <button
               onClick={async (event) => {
@@ -2329,7 +2360,7 @@ export default function Meeting() {
               }}
               style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: 'none', background: colors.blueHighlight, color: 'white', fontWeight: 600, fontSize: '1rem', cursor: 'pointer', transition: 'transform 0.2s' }}
             >
-              Masuk ke Rapat
+              Join Meeting
             </button>
           </div>
         </div>
