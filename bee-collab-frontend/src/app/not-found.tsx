@@ -5,13 +5,13 @@ import Link from 'next/link';
 export default function NotFound() {
   return (
     <div style={{
-      height: '100vh',
+      minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       textAlign: 'center',
-      padding: '24px',
+      padding: '24px 24px 6rem',
       fontFamily: "'Google Sans', 'Inter', Roboto, Arial, sans-serif",
       backgroundColor: '#ffffff',
       color: '#202124'
@@ -22,9 +22,9 @@ export default function NotFound() {
         </svg>
       </div>
       
-      <h1 style={{ fontSize: '2.5rem', fontWeight: 400, marginBottom: '1rem', letterSpacing: '-0.01em' }}>Halaman tidak ditemukan</h1>
+      <h1 style={{ fontSize: '2.5rem', fontWeight: 400, marginBottom: '1rem', letterSpacing: '-0.01em' }}>Page not found</h1>
       <p style={{ color: '#5f6368', fontSize: '1.1rem', marginBottom: '2.5rem', maxWidth: '500px', lineHeight: '1.5' }}>
-        Sepertinya Anda mencoba mengakses halaman yang tidak ada atau telah dipindahkan.
+        Looks like you're trying to access a page that doesn't exist or has been moved.
       </p>
       
       <Link href="/" style={{
@@ -38,7 +38,7 @@ export default function NotFound() {
         boxShadow: '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',
         transition: 'background-color 0.2s'
       }}>
-        Kembali ke Beranda
+        Back to Home
       </Link>
       
       <div style={{ position: 'absolute', bottom: '2.5rem', display: 'flex', alignItems: 'center', gap: '10px', color: '#5f6368' }}>
