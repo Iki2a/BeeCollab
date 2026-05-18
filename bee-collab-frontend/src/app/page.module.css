@@ -3,11 +3,8 @@
   color: #202124;
   min-height: 100vh;
   font-family: 'Google Sans', 'Inter', Roboto, Arial, sans-serif;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  width: 100%;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -42,8 +39,31 @@
   font-size: 18px;
 }
 
-.dateTime {
+.dateTimeInline {
   font-size: 18px;
+  color: #5f6368;
+}
+
+.dateTime {
+  display: none;
+  position: fixed;
+  top: 88px;
+  right: 24px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #5f6368;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border: 1px solid #e8eaed;
+  z-index: 50;
+  transition: top 0.25s ease-out, right 0.25s ease-out;
+}
+
+.dateTimeScrolled {
+  top: 16px;
 }
 
 .headerIcons {
@@ -254,7 +274,7 @@
 }
 
 .statusIndicator {
-  position: absolute;
+  position: fixed;
   bottom: 16px;
   left: 24px;
   display: flex;
@@ -267,6 +287,7 @@
   border-radius: 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   border: 1px solid #e8eaed;
+  z-index: 50;
 }
 
 .statusDot {
@@ -283,8 +304,18 @@
   .header {
     padding: 12px 16px;
   }
-  .dateTime {
+  .dateTimeInline {
     display: none;
+  }
+  .dateTime {
+    display: flex;
+    top: 72px;
+    right: 10px;
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .dateTimeScrolled {
+    top: 10px;
   }
   .headerIcons {
     gap: 8px;
@@ -296,13 +327,10 @@
     padding: 40px 16px;
     margin-top: 20px;
   }
-  
+
   .leftColumn {
+    display: contents;
     text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    max-width: 100%;
   }
 
   .title {
@@ -315,7 +343,7 @@
     margin-bottom: 32px;
     max-width: 100%;
   }
-  
+
   .actionArea {
     justify-content: center;
     width: 100%;
@@ -343,7 +371,17 @@
   }
 
   .rightColumn {
-    display: none; /* Hide illustration on small screens to prioritize actions */
+    width: 100%;
+    order: 1;
+  }
+
+  .divider {
+    order: 2;
+    max-width: none;
+  }
+
+  .learnMore {
+    order: 3;
   }
 
   .statusIndicator {

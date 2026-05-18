@@ -24,6 +24,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
     const apiBase = getApiBase();
@@ -83,7 +84,14 @@ export default function Home() {
     updateTime();
     const timer = setInterval(updateTime, 60000);
 
-    return () => clearInterval(timer);
+    const handleScroll = () => setIsScrolled(window.scrollY > 40);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   const performLogout = () => {
@@ -101,7 +109,7 @@ export default function Home() {
   const handleJoin = async () => {
     if (meetingCode.trim()) {
       setLoading(true);
-      setLoadingMessage('Menyiapkan ruang pertemuan...');
+      setLoadingMessage('Joining meeting...');
 
       const apiBase = getApiBase();
       const token = localStorage.getItem('token');
@@ -142,13 +150,16 @@ export default function Home() {
 
     const maxParticipants = Number(newMeetingForm.maxParticipants);
     if (Number.isNaN(maxParticipants) || maxParticipants < 2 || maxParticipants > 10) {
-      setNewMeetingError('Jumlah peserta harus antara 2 sampai 10.');
+      setNewMeetingError('Number of participants must be between 2 and 10.');
       return;
     }
 
     setLoading(true);
-    setLoadingMessage('Menciptakan ruang pertemuan baru...');
+    setLoadingMessage('Setting up meeting...');
     setNewMeetingError('');
+
+    const startedAt = Date.now();
+    const minLoadingMs = 2000;
 
     try {
       const apiBase = getApiBase();
@@ -166,15 +177,19 @@ export default function Home() {
       });
       if (res.ok) {
         const data = await res.json();
+        const elapsed = Date.now() - startedAt;
+        if (elapsed < minLoadingMs) {
+          await new Promise(resolve => setTimeout(resolve, minLoadingMs - elapsed));
+        }
         router.push(`/meeting/${data.id}`);
       } else {
         setLoading(false);
-        setNewMeetingError('Gagal membuat meeting. Silakan coba lagi.');
+        setNewMeetingError('Failed to create meeting. Please try again.');
       }
     } catch (err) {
       console.error(err);
       setLoading(false);
-      setNewMeetingError('Terjadi kesalahan saat membuat meeting.');
+      setNewMeetingError('An error occurred while creating the meeting.');
     }
   };
 
@@ -196,7 +211,7 @@ export default function Home() {
         </div>
 
         <div className={styles.headerRight}>
-          <span className={styles.dateTime}>{currentTime}</span>
+          <span className={styles.dateTimeInline}>{currentTime}</span>
           {isLoggedIn ? (
             <button
               className={styles.logoutBtn}
@@ -225,20 +240,20 @@ export default function Home() {
           </p>
 
           {isCreating ? (
-            <div style={{ background: '#ffffff', border: '1px solid #dadce0', padding: '1.5rem', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-              <h3 style={{ margin: '0 0 1rem 0', color: '#202124' }}>Buat Meeting Baru</h3>
+            <div style={{ background: '#ffffff', border: '1px solid #dadce0', padding: '1.5rem', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', alignSelf: 'center' }}>
+              <h3 style={{ margin: '0 0 1rem 0', color: '#202124' }}>Create New Meeting</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Nama Meeting</label>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Meeting Name</label>
                   <input type="text" value={newMeetingForm.title} onChange={e => setNewMeetingForm({ ...newMeetingForm, title: e.target.value })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #dadce0', borderRadius: '8px', fontSize: '1rem' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Durasi (menit)</label>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Duration (minutes)</label>
                     <input type="number" value={newMeetingForm.duration} onChange={e => setNewMeetingForm({ ...newMeetingForm, duration: parseInt(e.target.value) })} min="1" style={{ width: '100%', padding: '0.75rem', border: '1px solid #dadce0', borderRadius: '8px', fontSize: '1rem' }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Maks. Peserta</label>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#3c4043', marginBottom: '0.5rem' }}>Max. Participants</label>
                     <input type="number" value={newMeetingForm.maxParticipants} onChange={e => setNewMeetingForm({ ...newMeetingForm, maxParticipants: parseInt(e.target.value) })} min="2" max="10" style={{ width: '100%', padding: '0.75rem', border: '1px solid #dadce0', borderRadius: '8px', fontSize: '1rem' }} />
                   </div>
                 </div>
@@ -248,8 +263,8 @@ export default function Home() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                  <button onClick={() => setIsCreating(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', background: 'transparent', cursor: 'pointer', fontWeight: 500, color: '#3c4043' }}>Batal</button>
-                  <button onClick={handleCreateNewMeeting} style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#1a73e8', color: 'white', cursor: 'pointer', fontWeight: 500 }}>Buat</button>
+                  <button onClick={() => setIsCreating(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', background: 'transparent', cursor: 'pointer', fontWeight: 500, color: '#3c4043' }}>Cancel</button>
+                  <button onClick={handleCreateNewMeeting} style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#1a73e8', color: 'white', cursor: 'pointer', fontWeight: 500 }}>Create</button>
                 </div>
               </div>
             </div>
@@ -265,7 +280,7 @@ export default function Home() {
                   setNewMeetingError('');
                   setIsCreating(true);
                 }}
-                title={hasActiveMeeting ? "Lanjutkan meeting aktif" : "Buat meeting baru"}
+                title={hasActiveMeeting ? "Resume active meeting" : "Create new meeting"}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z" />
@@ -323,6 +338,14 @@ export default function Home() {
         </div>
       </main>
 
+      <div className={`${styles.dateTime} ${isScrolled ? styles.dateTimeScrolled : ''}`}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        <span>{currentTime}</span>
+      </div>
+
       <div className={styles.statusIndicator}>
         <div className={`${styles.statusDot} ${styles[serverStatus]}`}></div>
         <span>{serverStatus === 'checking' ? 'Connecting to server...' : serverStatus === 'online' ? 'System Online' : 'System Offline'}</span>
@@ -356,23 +379,23 @@ export default function Home() {
             }}
           >
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#202124', fontWeight: 600 }}>
-              Keluar dari BeeCollab?
+              Sign out of BeeCollab?
             </h3>
             <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.875rem', color: '#5f6368', lineHeight: 1.5 }}>
-              Anda akan keluar dari akun ini. Anda perlu masuk lagi untuk melanjutkan.
+              You will be signed out of this account. You'll need to sign in again to continue.
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setShowLogoutConfirm(false)}
                 style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: '1px solid #dadce0', background: 'transparent', cursor: 'pointer', fontWeight: 500, color: '#3c4043', fontSize: '0.875rem' }}
               >
-                Batal
+                Cancel
               </button>
               <button
                 onClick={performLogout}
                 style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: '#d93025', color: 'white', cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem' }}
               >
-                Keluar
+                Sign out
               </button>
             </div>
           </div>
@@ -383,31 +406,55 @@ export default function Home() {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(255, 255, 255, 0.9)',
-          backdropFilter: 'blur(8px)',
+          background: '#ffffff',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 9999,
+          padding: '1.5rem',
           animation: 'fadeIn 0.3s ease-out'
         }}>
           <style>{`
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-            @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+            @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
           `}</style>
+
+          <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="#00832d" />
+              <path d="M17 10.5V7C17 6.44772 16.5523 6 16 6H4C3.44772 6 3 6.44772 3 7V17C3 17.5523 3.44772 18 4 18H16C16.5523 18 17 17.5523 17 17V13.5L21 17.5V6.5L17 10.5Z" fill="url(#loadingLogoGradient)" />
+              <defs>
+                <linearGradient id="loadingLogoGradient" x1="12" y1="6" x2="12" y2="18" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#00E676" />
+                  <stop offset="1" stopColor="#00C853" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1f3b64', margin: 0, letterSpacing: '-0.02em' }}>BeeCollab</h1>
+          </div>
+
           <div style={{
-            width: '64px',
-            height: '64px',
-            border: '4px solid #f3f3f3',
-            borderTop: '4px solid #1a73e8',
+            width: '40px',
+            height: '40px',
+            border: '3px solid rgba(26, 115, 232, 0.1)',
+            borderTop: '3px solid #1a73e8',
             borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
+            animation: 'spin 0.8s linear infinite',
             marginBottom: '1.5rem'
           }}></div>
-          <h2 style={{ color: '#202124', margin: '0 0 0.5rem 0', fontWeight: 500 }}>{loadingMessage}</h2>
-          <p style={{ color: '#5f6368', margin: 0, fontSize: '0.875rem', animation: 'pulse 2s infinite' }}>Mohon tunggu sebentar...</p>
+
+          <div style={{ textAlign: 'center', maxWidth: '320px' }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#202124', margin: '0 0 0.5rem 0' }}>{loadingMessage}</h2>
+            <p style={{ fontSize: '0.875rem', color: '#5f6368', margin: 0 }}>Please wait a moment...</p>
+          </div>
+
+          <div style={{ position: 'absolute', bottom: '3rem', display: 'flex', gap: '0.5rem' }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', animation: `bounce 1s infinite ${i * 0.2}s` }}></div>
+            ))}
+          </div>
         </div>
       )}
     </div>

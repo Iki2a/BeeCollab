@@ -16,6 +16,7 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -71,7 +72,7 @@ export default function AuthPage() {
           {mode === 'login' ? 'Sign In' : 'Create Account'}
         </h1>
         <p style={{ color: '#5f6368', textAlign: 'center', marginBottom: '2rem', fontSize: '0.875rem' }}>
-          {mode === 'login' ? 'Gunakan akun BeeCollab Anda' : 'Daftar untuk mulai berkolaborasi'}
+          {mode === 'login' ? 'Use your BeeCollab account' : 'Sign up to start collaborating'}
         </p>
 
         {error && <div style={{ color: '#d93025', marginBottom: '1.5rem', textAlign: 'center', background: '#fce8e6', padding: '0.75rem', borderRadius: '8px', fontSize: '0.875rem' }}>{error}</div>}
@@ -103,14 +104,62 @@ export default function AuthPage() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#3c4043', marginBottom: '0.5rem' }}>PASSWORD</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={mode === 'register' ? 6 : undefined}
+                style={{ width: '100%', padding: '0.75rem', paddingRight: '2.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(p => !p)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  right: '0.5rem',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  padding: '0.4rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#5f6368',
+                  borderRadius: '4px'
+                }}
+              >
+                {showPassword ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {mode === 'register' && (
+              <div style={{
+                marginTop: '0.375rem',
+                fontSize: '0.75rem',
+                color: password.length === 0 ? '#5f6368' : password.length >= 6 ? '#1e8e3e' : '#d93025'
+              }}>
+                {password.length === 0
+                  ? 'Minimum 6 characters'
+                  : password.length >= 6
+                    ? '✓ Password meets requirements'
+                    : `Minimum 6 characters (${password.length}/6)`}
+              </div>
+            )}
           </div>
 
           <button
@@ -136,22 +185,22 @@ export default function AuthPage() {
         <div style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.875rem', color: '#5f6368' }}>
           {mode === 'login' ? (
             <>
-              Belum punya akun?{' '}
+              Don't have an account?{' '}
               <button
                 onClick={() => setMode('register')}
                 style={{ background: 'none', border: 'none', color: '#1a73e8', fontWeight: 600, cursor: 'pointer', padding: 0 }}
               >
-                Daftar sekarang
+                Sign up
               </button>
             </>
           ) : (
             <>
-              Sudah punya akun?{' '}
+              Already have an account?{' '}
               <button
                 onClick={() => setMode('login')}
                 style={{ background: 'none', border: 'none', color: '#1a73e8', fontWeight: 600, cursor: 'pointer', padding: 0 }}
               >
-                Masuk di sini
+                Sign in
               </button>
             </>
           )}
