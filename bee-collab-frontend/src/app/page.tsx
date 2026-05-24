@@ -51,8 +51,11 @@ export default function Home() {
         .then(json => {
           const data = unwrap<any[]>(json);
           if (Array.isArray(data) && data.length > 0) {
-            setHasActiveMeeting(true);
-            setActiveMeetingId(data[0]?.id || null);
+            const liveMeeting = data.find((m: any) => m.status === 'LIVE');
+            if (liveMeeting) {
+              setHasActiveMeeting(true);
+              setActiveMeetingId(liveMeeting.id);
+            }
           }
         })
         .catch(err => {
