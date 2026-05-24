@@ -29,12 +29,27 @@ export default function Home() {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const apiBase = getApiBase();
     const token = localStorage.getItem('token');
     if (token) {
       setIsLoggedIn(true);
+
+      // Fetch logged-in user's display name
+      fetch(`${apiBase}/users/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(json => {
+          if (json) {
+            const me = unwrap(json);
+            setUserName(me?.name ?? null);
+          }
+        })
+        .catch(() => {});
+
       fetch(`${apiBase}/meetings`, {
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -107,6 +122,7 @@ export default function Home() {
     setIsLoggedIn(false);
     setHasActiveMeeting(false);
     setActiveMeetingId(null);
+    setUserName(null);
     setShowLogoutConfirm(false);
     router.refresh();
   };
@@ -221,13 +237,20 @@ export default function Home() {
         <div className={styles.headerRight}>
           <span className={styles.dateTimeInline}>{currentTime}</span>
           {isLoggedIn ? (
-            <button
-              className={styles.logoutBtn}
-              onClick={() => setShowLogoutConfirm(true)}
-              style={{ background: 'none', border: '1px solid #dadce0', color: '#d93025', fontWeight: 500, fontSize: '14px', cursor: 'pointer', padding: '8px 16px', borderRadius: '4px' }}
-            >
-              Logout
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {userName && (
+                <span style={{ fontSize: '0.875rem', color: '#3c4043', fontWeight: 500 }}>
+                  👤 {userName}
+                </span>
+              )}
+              <button
+                className={styles.logoutBtn}
+                onClick={() => setShowLogoutConfirm(true)}
+                style={{ background: 'none', border: '1px solid #dadce0', color: '#d93025', fontWeight: 500, fontSize: '14px', cursor: 'pointer', padding: '8px 16px', borderRadius: '4px' }}
+              >
+                Logout
+              </button>
+            </div>
           ) : (
             <button
               className={styles.loginBtn}
