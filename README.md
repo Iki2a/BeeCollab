@@ -1,124 +1,141 @@
 # 🐝 BeeCollab
 
-**BeeCollab** is a premium, full-stack video conferencing platform inspired by Google Meet. Built for seamless collaboration, it provides high-quality real-time communication, screen sharing, and interactive meeting features — with a polished, mobile-first experience.
+**BeeCollab** is a premium, full-stack video conferencing platform inspired by Google Meet. Built for seamless real-time collaboration, it provides high-quality P2P video/audio, screen sharing, live chat, and a host of participant controls — with a polished, mobile-first experience.
 
-![BeeCollab Preview](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/video.svg)
+🌐 **Live:** [https://beecollab.joman.id](https://beecollab.joman.id)
+📄 **API Docs (Swagger):** [https://api.beecollab.joman.id/api/docs](https://api.beecollab.joman.id/api/docs)
 
 ---
 
 ## ✨ Features
 
 ### 🔐 Secure Authentication
-- Full Sign In / Sign Up flow with **JWT** security.
-- **Password strength indicator** with live feedback (minimum-length progress counter that shifts color as you type).
-- **Show / hide password** toggle (eye icon) for easier typing on mobile.
-- **Logout confirmation modal** so accidental clicks don't end your session.
-- Protected routes and session management.
-- Persistent login using local storage tokens.
+- Full Sign In / Sign Up flow with **JWT** security
+- **Password strength indicator** with live feedback
+- **Show / hide password** toggle for easier typing on mobile
+- **Logout confirmation modal** to prevent accidental logouts
+- Persistent login via localStorage token
+- Logged-in user's **display name** shown in the homepage header
 
 ### 📹 Real-Time Video Meetings
-- **WebRTC Peer-to-Peer** audio and video streaming.
-- **Screen Sharing**: Present your screen to all participants instantly.
-- **Voice Activity Detection**: Real-time indication of who is currently speaking.
-- **Auto-Autoplay Handling**: Graceful "Ready to Join?" overlay when the browser blocks autoplay.
-- **Device Settings**: Pick your preferred microphone and camera mid-meeting.
+- **WebRTC Peer-to-Peer** audio and video streaming (full mesh, no SFU)
+- **Screen Sharing**: present your screen to all participants instantly
+- **Voice Activity Detection**: real-time speaking indicator
+- **Auto-Autoplay Handling**: graceful "Ready to Join?" overlay on browser autoplay block
+- **Device Settings**: switch microphone and camera mid-meeting
 
 ### 💬 Interactive Collaboration
-- **Real-Time Chat**: Send messages within the meeting room, with long-message wrapping and fullscreen mobile chat.
-- **Hand Raise**: Signal the host when you want to speak.
+- **Real-Time Chat**: messages persisted to DB and delivered to all participants
+- **Hand Raise**: signal the host when you want to speak
 - **Participant Management**:
-  - Host & Co-host roles.
-  - Kick participants.
-  - Ask to unmute / Force mute.
-  - View active participant list with search.
-- **Meeting Info Modal**: View the meeting name and shareable code with one tap.
+  - Host & Co-host roles
+  - Kick participants
+  - Ask to unmute / Force mute
+  - Live participant list with search
+- **Meeting Info Modal**: view meeting name and shareable room code
 
 ### 📱 Modern & Responsive UI
-- **Google Meet Inspired Design**: Sleek, professional interface with a clean layout.
-- **Dynamic Video Grid**: Automatically adjusts based on participant count and screen sharing status.
-- **Mobile-Optimized Meeting Room**:
-  - Compact top bar with meeting title chip + connection status dot + pill-shaped leave button.
-  - Kebab menu consolidates screen share & device settings on small screens.
-  - Chat opens fullscreen; participants list appears as a centered modal.
-- **Adaptive Home Page**:
-  - Date & time shows inline in the header on desktop, becomes a floating pill on mobile that smoothly slides toward the top corner on scroll.
-  - System status indicator floats in the bottom-left corner (always visible).
-- **Branded Loading Screens**: Consistent green-themed loading transitions between Home and Meeting routes.
-- **Responsive Meeting End Screen**: Scales gracefully from desktop down to narrow mobile, with auto-return countdown.
-- **Network Aware**: Backend is configured to support cross-device testing on local networks.
+- **Google Meet Inspired Design**: sleek, professional layout
+- **Dynamic Video Grid**: auto-adjusts for participant count and screen sharing
+- **Mobile-Optimized Meeting Room**: compact top bar, kebab menu for secondary controls, fullscreen chat
+- **Adaptive Home Page**: inline time on desktop, floating pill on mobile
+- **Branded Loading Screens**: consistent transitions between routes
+
+---
+
+## 🏗️ Software Engineering Design Patterns
+
+This project implements the following SE patterns as part of the architecture:
+
+| # | Pattern | Implementation |
+|---|---|---|
+| 1 | **Repository Pattern** | `src/repositories/` — abstracts all DB access behind interfaces (`IUserRepository`, `IMeetingRepository`, etc.), with Prisma implementations injected via DI tokens. Satisfies DIP from SOLID. |
+| 2 | **Decorator Pattern** (Response Interceptor) | `ResponseInterceptor` wraps every HTTP response in a consistent `ApiResponse` envelope without touching any controller. |
+| 3 | **Exception Filter** | `HttpExceptionFilter` centralises all error formatting into a single class — one source of truth for error shape. |
+| 4 | **Swagger / OpenAPI** | Full interactive API documentation at `/api/docs`, with JWT auth, `@ApiProperty` on all DTOs, and documented status codes on every endpoint. |
+| 5 | **Observer Pattern** (Event-Driven Architecture) | `@nestjs/event-emitter` — services emit domain events (`meeting.ended`, `participant.joined`, `participant.left`); `MeetingEventsListener` reacts independently. Enables auto-end of empty meetings without modifying any publisher (Open/Closed Principle). |
 
 ---
 
 ## 🚀 Tech Stack
 
 ### Frontend
-- **Framework**: [Next.js 16](https://nextjs.org/) (App Router, React 19)
-- **Language**: TypeScript
-- **Styling**: CSS Modules + inline styles (custom design system)
-- **Icons**: [Lucide React](https://lucide.dev/)
-- **Real-time**: [Socket.io-client](https://socket.io/)
+| | |
+|---|---|
+| Framework | [Next.js 16](https://nextjs.org/) (App Router, React 19) |
+| Language | TypeScript |
+| Styling | CSS Modules + inline styles |
+| Real-time | [Socket.io-client](https://socket.io/) |
 
 ### Backend
-- **Framework**: [NestJS 11](https://nestjs.com/)
-- **Language**: TypeScript
-- **Database**: [PostgreSQL](https://www.postgresql.org/) (via [Supabase](https://supabase.com/))
-- **ORM**: [Prisma](https://www.prisma.io/) (v7, with `@prisma/adapter-pg` driver adapter)
-- **Real-time**: [Socket.io](https://socket.io/) Gateway on the `/meetings` namespace
-- **Auth**: Passport.js & JWT (REST + WebSocket guards)
+| | |
+|---|---|
+| Framework | [NestJS 11](https://nestjs.com/) |
+| Language | TypeScript |
+| Database | PostgreSQL (VPS — `103.143.12.138`) |
+| ORM | [Prisma 7](https://www.prisma.io/) with `@prisma/adapter-pg` |
+| Real-time | Socket.io Gateway — `/meetings` namespace |
+| Auth | Passport.js + JWT (REST guards + WebSocket guards) |
+| Events | `@nestjs/event-emitter` (Observer Pattern) |
+| Docs | `@nestjs/swagger` — Swagger UI at `/api/docs` |
+| Process Manager | PM2 (VPS deployment) |
+| Reverse Proxy | Nginx + Certbot (HTTPS) |
 
 ---
 
 ## 🛠️ Getting Started
 
 ### Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
-- A PostgreSQL database (or Supabase project)
+- Node.js v18+
+- npm
+- PostgreSQL database
 
 ### ⚡ Quick Start (Windows)
-A one-click launcher script is provided for convenience. From the repo root:
 ```bash
 run.bat
 ```
-On first run it auto-installs dependencies for both apps and generates the Prisma client. On subsequent runs it skips straight to launching the backend and frontend in separate terminal windows.
+Auto-installs dependencies and launches both apps in separate terminals.
 
-> Make sure `bee-collab-backend/.env` is set up before running (see template below).
+> Requires `bee-collab-backend/.env` to be configured first.
 
 ### Manual Setup
 
-#### 1. Backend Setup
+#### 1. Backend
 ```bash
 cd bee-collab-backend
 npm install
 ```
-- Create a `.env` file in `bee-collab-backend/`:
+
+Create `bee-collab-backend/.env`:
 ```env
-DATABASE_URL="your_supabase_transaction_pooler_url"
-DIRECT_URL="your_supabase_direct_connection_url"
+DATABASE_URL="postgresql://user:password@host:5432/dbname"
 JWT_SECRET="your_secure_random_secret"
 JWT_EXPIRES_IN="1d"
 PORT=3000
 ```
-- Initialize Database:
+
 ```bash
 npx prisma generate
 npx prisma db push
-```
-- Start Backend:
-```bash
 npm run start:dev
 ```
 
-#### 2. Frontend Setup
+#### 2. Frontend
 ```bash
 cd bee-collab-frontend
 npm install
 ```
-- Start Frontend:
+
+Create `bee-collab-frontend/.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3000
+```
+
 ```bash
 npm run dev
 ```
-- Access the app at `http://localhost:3001` (or your local IP for cross-device testing).
+
+Open [http://localhost:3001](http://localhost:3001).
 
 ---
 
@@ -126,44 +143,71 @@ npm run dev
 
 ```text
 BeeCollab/
-├── bee-collab-backend/          # NestJS (Signaling & Management Server)
-│   ├── prisma/                  # Database Layer
-│   │   └── schema.prisma        # Database schema & relationships
-│   ├── src/
-│   │   ├── auth/                # Auth (JWT, Guards, Strategies, Login/Register)
-│   │   ├── meetings/            # Meeting CRUD, validation & room code logic
-│   │   ├── signaling/           # WebRTC Signaling Gateway (Socket.io)
-│   │   ├── chat/                # Real-time chat & message persistence
-│   │   ├── users/               # User profile management
-│   │   ├── prisma/              # Prisma Client Service & Module
-│   │   ├── app.module.ts        # Root application module
-│   │   └── main.ts              # Entry point, CORS & binding (0.0.0.0:3000)
-│   ├── .env.example             # Template for backend environment variables
-│   └── package.json             # Backend dependencies & scripts
-├── bee-collab-frontend/         # Next.js 16 (Frontend Web App)
-│   ├── public/                  # Static assets & illustrations
-│   ├── src/app/
-│   │   ├── login/               # Sign In / Sign Up (single page, mode toggle)
-│   │   ├── meeting/[id]/        # Core Meeting Room (WebRTC, UI & Signaling)
-│   │   ├── globals.css          # Global Design System & CSS Variables
-│   │   ├── layout.tsx           # Root layout & global providers
-│   │   ├── not-found.tsx        # Custom 404 Error Page
-│   │   ├── page.module.css      # Home page styles & responsive rules
-│   │   └── page.tsx             # Homepage Dashboard (Join / Create Meeting)
-│   ├── next.config.ts           # Next.js configuration
-│   └── package.json             # Frontend dependencies & scripts
+├── bee-collab-backend/          # NestJS — Signaling & REST API server
+│   ├── prisma/
+│   │   └── schema.prisma        # Database schema (User, Meeting, Participant, ChatMessage)
+│   └── src/
+│       ├── auth/                # JWT auth, guards, login/register
+│       ├── chat/                # Chat REST endpoint + service
+│       ├── common/
+│       │   ├── filters/         # HttpExceptionFilter (Global Exception Filter)
+│       │   └── interceptors/    # ResponseInterceptor (Global Response Wrapper)
+│       ├── events/              # Observer Pattern — domain events + listener
+│       │   ├── meeting.events.ts
+│       │   ├── meeting-events.listener.ts
+│       │   └── events.module.ts
+│       ├── meetings/            # Meeting CRUD, cleanup scheduler, room code logic
+│       ├── repositories/        # Repository Pattern — interfaces + Prisma implementations
+│       │   ├── interfaces/      # IUserRepository, IMeetingRepository, etc.
+│       │   ├── prisma/          # Concrete Prisma implementations
+│       │   └── repository.module.ts
+│       ├── signaling/           # WebRTC Signaling Gateway (Socket.io)
+│       ├── users/               # User profile
+│       ├── app.module.ts        # Root module
+│       └── main.ts              # Bootstrap, CORS, Swagger, global pipes
+├── bee-collab-frontend/         # Next.js 16 — Web app
+│   └── src/app/
+│       ├── login/               # Sign In / Sign Up page
+│       ├── meeting/[id]/        # Meeting room (WebRTC, chat, controls)
+│       └── page.tsx             # Homepage (join / create meeting)
 ├── run.bat                      # One-click launcher (Windows)
-└── README.md                    # Unified Project Documentation
+└── README.md
 ```
 
 ---
 
-## 🌐 Network Testing
-BeeCollab is configured to be accessible across your local network.
-1. Find your local IP address (e.g., `192.168.1.XX`).
-2. Update the `next.config.ts` `allowedDevOrigins` if necessary.
-3. Access the frontend via `http://YOUR_IP:3001`.
-4. The backend explicitly listens on `0.0.0.0:3000` to facilitate these connections.
+## 🌐 Deployment
+
+| | URL |
+|---|---|
+| Frontend | `https://beecollab.joman.id` |
+| Backend API | `https://api.beecollab.joman.id` |
+| Swagger UI | `https://api.beecollab.joman.id/api/docs` |
+
+Hosted on a VPS (`103.143.12.138`) with:
+- **PM2** managing both Node.js processes
+- **Nginx** as reverse proxy with separate virtual hosts
+- **Certbot** for SSL certificates
+
+---
+
+## 🔌 WebSocket Events
+
+Namespace: `/meetings` — auth via handshake `{ token: "JWT" }`
+
+| Client → Server | Payload | Server → Client |
+|---|---|---|
+| `meeting:join` | `{ meetingId }` | `participant:joined`, `meeting:state`, `chat:history` |
+| `webrtc:offer` | `{ to, from, sdp }` | `webrtc:offer` (to target) |
+| `webrtc:answer` | `{ to, from, sdp }` | `webrtc:answer` (to target) |
+| `webrtc:ice-candidate` | `{ to, from, candidate }` | `webrtc:ice-candidate` (to target) |
+| `media:toggle` | `{ meetingId, type, enabled }` | `media:updated` (to room) |
+| `chat:message` | `{ meetingId, message }` | `chat:message` (to room) |
+| `meeting:end` | `{ meetingId }` | `meeting:ended` (HOST only) |
+| `meeting:kick` | `{ meetingId, targetSocketId }` | `meeting:kicked` (HOST only) |
+| `hand:toggle` | `{ meetingId, raised }` | `hand:updated` (to room) |
+| `media:force-mute` | `{ meetingId, targetSocketId }` | `media:force-mute` (HOST only) |
+| *disconnect* | — | `participant:left` (to room) |
 
 ---
 

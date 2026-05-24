@@ -1,641 +1,198 @@
-# BeeCollab - Live Meeting Backend
+# BeeCollab — Backend
 
-BeeCollab adalah back-end project untuk aplikasi **live meeting** seperti Google Meet, Zoom, atau Cisco Webex. Project ini berfokus pada pengelolaan meeting room, autentikasi user, participant management, chat, dan real-time signaling menggunakan **NestJS**.
+NestJS backend for **BeeCollab**, a real-time P2P video meeting platform. Handles authentication, meeting management, WebRTC signaling, live chat, and implements several SE design patterns.
 
-> Catatan: Untuk MVP, audio/video meeting dapat menggunakan **WebRTC peer-to-peer**. Backend tidak mengirim stream video secara langsung, melainkan menjadi server untuk autentikasi, manajemen meeting, dan signaling antar-user. Untuk skala besar, project dapat dikembangkan dengan SFU seperti mediasoup, LiveKit, atau Jitsi.
-
----
-
-## Daftar Isi
-
-- [Tentang Project](#tentang-project)
-- [Fitur Utama](#fitur-utama)
-- [Tech Stack](#tech-stack)
-- [Arsitektur Singkat](#arsitektur-singkat)
-- [Alur Sistem](#alur-sistem)
-- [Struktur Folder](#struktur-folder)
-- [Database Design](#database-design)
-- [REST API Endpoint](#rest-api-endpoint)
-- [WebSocket Event](#websocket-event)
-- [Environment Variables](#environment-variables)
-- [Cara Menjalankan Project](#cara-menjalankan-project)
-- [Testing](#testing)
-- [Roadmap](#roadmap)
-- [Author](#author)
-
----
-
-## Tentang Project
-
-**BeeCollab** adalah backend service untuk aplikasi meeting online yang memungkinkan user untuk membuat meeting room, bergabung ke meeting, melihat daftar participant, mengirim chat, dan melakukan proses signaling untuk koneksi audio/video secara real-time.
-
-Project ini dibuat menggunakan **NestJS** karena framework ini mendukung struktur modular, dependency injection, guard, interceptor, decorator, dan WebSocket gateway yang cocok untuk aplikasi real-time.
-
----
-
-## Fitur Utama
-
-### Authentication & Authorization
-- Register user
-- Login user
-- JWT authentication
-- Protected endpoint menggunakan guard
-- Role participant: `HOST`, `CO_HOST`, `PARTICIPANT`
-
-### Meeting Management
-- Membuat meeting room
-- Generate room code / meeting ID
-- Join meeting
-- Leave meeting
-- End meeting oleh host
-- Melihat detail meeting
-- Melihat daftar participant
-
-### Real-Time Communication
-- WebSocket gateway untuk komunikasi real-time
-- Participant join/leave notification
-- Meeting status update
-- Chat real-time di dalam meeting room
-
-### WebRTC Signaling
-- Mengirim SDP offer
-- Mengirim SDP answer
-- Mengirim ICE candidate
-- Forward signaling data ke participant tujuan
-- Mendukung koneksi audio/video antar-user
-
-### Participant Controls
-- Mute/unmute microphone status
-- Turn on/off camera status
-- Host dapat mengeluarkan participant
-- Host dapat mengakhiri meeting
+📄 **Swagger UI:** [https://api.beecollab.joman.id/api/docs](https://api.beecollab.joman.id/api/docs)
 
 ---
 
 ## Tech Stack
 
-| Kebutuhan | Teknologi |
+| | |
 |---|---|
-| Backend Framework | NestJS |
-| Language | TypeScript |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Authentication | JWT |
-| Realtime Communication | WebSocket / Socket.IO |
-| Cache & Pub/Sub | Redis |
-| API Documentation | Swagger |
-| Containerization | Docker |
-| Testing | Jest |
+| Framework | NestJS 11 (TypeScript) |
+| Database | PostgreSQL via Prisma 7 (`@prisma/adapter-pg`) |
+| Real-time | Socket.io — `/meetings` namespace |
+| Auth | Passport.js + JWT |
+| Events | `@nestjs/event-emitter` |
+| API Docs | `@nestjs/swagger` |
 
 ---
 
-## Arsitektur Singkat
+## SE Design Patterns
 
-```text
-Client Web / Mobile
-        |
-        | REST API
-        v
-NestJS Backend
-        |
-        |-- Auth Module
-        |-- Users Module
-        |-- Meetings Module
-        |-- Participants Module
-        |-- Chat Module
-        |-- Signaling Gateway
-        |
-        | Database
-        v
-PostgreSQL
+### 1. Repository Pattern
+All database access is abstracted behind interfaces (`IUserRepository`, `IMeetingRepository`, `IParticipantRepository`, `IChatRepository`). Services depend on the interface, not on Prisma directly. Concrete Prisma implementations are injected via DI tokens — satisfying the Dependency Inversion Principle.
 
-Client <------ WebSocket Signaling ------> Client
-Client <---------- WebRTC Media ----------> Client
+```
+src/repositories/
+├── interfaces/         ← abstract contracts (IUserRepository, etc.)
+├── prisma/             ← concrete Prisma implementations
+├── tokens.ts           ← DI injection tokens
+└── repository.module.ts
 ```
 
-Pada arsitektur ini:
+### 2. Decorator Pattern — Global Response Interceptor
+`ResponseInterceptor` wraps every successful HTTP response in a consistent envelope without any controller changes:
+```json
+{ "success": true, "data": {}, "message": "Success", "timestamp": "...", "path": "..." }
+```
 
-1. REST API digunakan untuk autentikasi, membuat meeting, join meeting, dan mengambil data meeting.
-2. WebSocket digunakan untuk event real-time seperti participant join, participant leave, chat, dan signaling WebRTC.
-3. WebRTC digunakan oleh client untuk mengirim audio/video secara langsung.
-4. PostgreSQL menyimpan data user, meeting, participant, dan chat.
-5. Redis dapat digunakan untuk scaling WebSocket jika backend berjalan di lebih dari satu instance.
+### 3. Global Exception Filter
+`HttpExceptionFilter` catches all `HttpException` instances and formats errors in the same envelope shape:
+```json
+{ "success": false, "error": "...", "statusCode": 404, "timestamp": "...", "path": "..." }
+```
+
+### 4. Swagger / OpenAPI
+Full interactive docs at `/api/docs`. All endpoints documented with tags, operation summaries, param descriptions, and response status codes. DTOs have `@ApiProperty` with examples. JWT Bearer auth built in with `persistAuthorization`.
+
+### 5. Observer Pattern — Event-Driven Architecture
+Domain events are emitted by publishers and handled independently by `MeetingEventsListener`, with zero coupling between them.
+
+| Event | Emitted by | Listener action |
+|---|---|---|
+| `meeting.ended` | `SignalingService`, `MeetingsService`, `CleanupService` | Audit log |
+| `participant.joined` | `SignalingService` | Audit log |
+| `participant.left` | `SignalingService` | Audit log + **auto-end meeting if empty** |
+
+The auto-end feature was added entirely inside the listener — no publisher was modified, demonstrating the Open/Closed Principle.
 
 ---
 
-## Alur Sistem
-
-### 1. User Login
-User login menggunakan email dan password. Jika data valid, server mengembalikan JWT access token.
-
-```text
-POST /api/v1/auth/login
-```
-
-### 2. Host Membuat Meeting
-Host membuat meeting room melalui REST API. Server akan membuat data meeting dan menghasilkan room code.
-
-```text
-POST /api/v1/meetings
-```
-
-### 3. Participant Join Meeting
-Participant memasukkan room code atau meeting ID. Server memvalidasi meeting lalu menambahkan participant ke meeting.
-
-```text
-POST /api/v1/meetings/:meetingId/join
-```
-
-### 4. Client Connect ke WebSocket
-Setelah join meeting, client membuka koneksi WebSocket ke namespace meeting.
-
-```text
-ws://localhost:3000/meetings
-```
-
-### 5. WebRTC Signaling
-Client saling bertukar `offer`, `answer`, dan `ice-candidate` melalui WebSocket gateway.
-
-```text
-User A -> Backend -> User B
-User B -> Backend -> User A
-```
-
-### 6. Media Stream Berjalan
-Setelah signaling selesai, audio/video berjalan lewat WebRTC antar-client.
-
----
-
-## Struktur Folder
+## Project Structure
 
 ```text
 src/
-├── app.module.ts
-├── main.ts
-├── common/
-│   ├── decorators/
-│   ├── filters/
+├── auth/                        # JWT auth, guards, login/register DTOs
+│   ├── dto/auth.dto.ts
 │   ├── guards/
-│   ├── interceptors/
-│   └── pipes/
-├── config/
-│   ├── app.config.ts
-│   ├── database.config.ts
-│   └── jwt.config.ts
-├── database/
-│   └── prisma.service.ts
-├── modules/
-│   ├── auth/
-│   │   ├── dto/
-│   │   ├── guards/
-│   │   ├── strategies/
-│   │   ├── auth.controller.ts
-│   │   ├── auth.module.ts
-│   │   └── auth.service.ts
-│   ├── users/
-│   │   ├── dto/
-│   │   ├── users.controller.ts
-│   │   ├── users.module.ts
-│   │   └── users.service.ts
-│   ├── meetings/
-│   │   ├── dto/
-│   │   ├── meetings.controller.ts
-│   │   ├── meetings.module.ts
-│   │   └── meetings.service.ts
-│   ├── participants/
-│   │   ├── dto/
-│   │   ├── participants.module.ts
-│   │   └── participants.service.ts
-│   ├── chat/
-│   │   ├── dto/
-│   │   ├── chat.module.ts
-│   │   └── chat.service.ts
-│   └── signaling/
-│       ├── dto/
-│       ├── signaling.gateway.ts
-│       ├── signaling.module.ts
-│       └── signaling.service.ts
-├── prisma/
-│   └── schema.prisma
-└── test/
+│   │   ├── jwt-auth.guard.ts    # REST guard
+│   │   └── ws-jwt.guard.ts      # WebSocket guard
+│   ├── jwt.strategy.ts
+│   ├── auth.service.ts
+│   └── auth.controller.ts
+├── chat/                        # Chat history REST endpoint
+├── common/
+│   ├── filters/
+│   │   └── http-exception.filter.ts   # Pattern #3
+│   └── interceptors/
+│       └── response.interceptor.ts    # Pattern #2
+├── events/                      # Pattern #5 — Observer
+│   ├── meeting.events.ts        # Event payload classes
+│   ├── meeting-events.listener.ts
+│   └── events.module.ts
+├── meetings/                    # Meeting CRUD + scheduled cleanup
+│   ├── dto/meeting.dto.ts
+│   ├── meetings.service.ts
+│   ├── meetings.controller.ts
+│   └── meetings.cleanup.service.ts
+├── repositories/                # Pattern #1 — Repository
+│   ├── interfaces/
+│   ├── prisma/
+│   ├── tokens.ts
+│   └── repository.module.ts
+├── signaling/                   # WebRTC signaling gateway (Socket.io)
+│   ├── signaling.gateway.ts
+│   ├── signaling.service.ts
+│   └── signaling.types.ts
+├── users/                       # User profile endpoint
+├── prisma/                      # PrismaService + PrismaModule
+├── app.module.ts
+└── main.ts                      # Bootstrap, Swagger, CORS, global pipes
 ```
 
 ---
 
-## Database Design
+## REST API Endpoints
 
-### User
-
-| Field | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| name | String | Nama user |
-| email | String | Email user, unique |
-| passwordHash | String | Password yang sudah di-hash |
-| avatarUrl | String? | Foto profil user |
-| createdAt | DateTime | Waktu data dibuat |
-| updatedAt | DateTime | Waktu data diubah |
-
-### Meeting
-
-| Field | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| title | String | Judul meeting |
-| roomCode | String | Kode meeting |
-| hostId | UUID | ID host meeting |
-| status | Enum | `SCHEDULED`, `LIVE`, `ENDED` |
-| startedAt | DateTime? | Waktu meeting dimulai |
-| endedAt | DateTime? | Waktu meeting berakhir |
-| maxParticipants | Number | Maksimal participant |
-| createdAt | DateTime | Waktu data dibuat |
-
-### Participant
-
-| Field | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| meetingId | UUID | ID meeting |
-| userId | UUID | ID user |
-| socketId | String? | ID koneksi WebSocket |
-| role | Enum | `HOST`, `CO_HOST`, `PARTICIPANT` |
-| audioEnabled | Boolean | Status microphone |
-| videoEnabled | Boolean | Status camera |
-| joinedAt | DateTime | Waktu join |
-| leftAt | DateTime? | Waktu leave |
-
-### ChatMessage
-
-| Field | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| meetingId | UUID | ID meeting |
-| senderId | UUID | ID pengirim |
-| message | String | Isi pesan |
-| type | Enum | `TEXT`, `SYSTEM` |
-| createdAt | DateTime | Waktu pesan dikirim |
-
----
-
-## REST API Endpoint
-
-Base URL:
-
-```text
-http://localhost:3000/api/v1
-```
+> All responses are wrapped in `ApiResponse`. See Swagger UI for full schema.
 
 ### Auth
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/auth/register` | Register user baru |
-| POST | `/auth/login` | Login user |
-| GET | `/auth/me` | Mengambil data user yang sedang login |
-| POST | `/auth/logout` | Logout user |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/register` | — | Register new account |
+| POST | `/auth/login` | — | Login, returns `access_token` |
 
 ### Users
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/users/:id` | Mengambil detail user |
-| PATCH | `/users/:id` | Update profile user |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/users/me` | 🔒 JWT | Get current user's profile |
 
 ### Meetings
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/meetings` | Membuat meeting baru |
-| GET | `/meetings` | Mengambil list meeting user |
-| GET | `/meetings/:meetingId` | Mengambil detail meeting |
-| POST | `/meetings/:meetingId/join` | Join ke meeting |
-| POST | `/meetings/:meetingId/leave` | Leave dari meeting |
-| PATCH | `/meetings/:meetingId/end` | Mengakhiri meeting |
-| GET | `/meetings/:meetingId/participants` | Mengambil daftar participant |
-
-### Participants
-
-| Method | Endpoint | Description |
-|---|---|---|
-| PATCH | `/meetings/:meetingId/participants/:participantId/mute` | Mengubah status microphone |
-| PATCH | `/meetings/:meetingId/participants/:participantId/camera` | Mengubah status camera |
-| DELETE | `/meetings/:meetingId/participants/:participantId` | Mengeluarkan participant dari meeting |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/meetings` | 🔒 JWT | Create meeting, auto-assign HOST |
+| GET | `/meetings` | 🔒 JWT | List my hosted meetings |
+| GET | `/meetings/:id` | 🔒 JWT | Get meeting by ID |
+| GET | `/meetings/code/:code` | 🔒 JWT | Resolve room code → meeting |
+| POST | `/meetings/:id/join` | 🔒 JWT | Join meeting by room code |
+| GET | `/meetings/:id/participants` | 🔒 JWT | List active participants |
+| DELETE | `/meetings/:id` | 🔒 JWT | End meeting (HOST only) |
 
 ### Chat
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/meetings/:id/chat` | 🔒 JWT | Get chat history |
 
-| Method | Endpoint | Description |
+---
+
+## WebSocket Events
+
+Namespace: `/meetings`
+Authentication: handshake `{ auth: { token: "JWT" } }`
+
+| Client → Server | Payload | Notes |
 |---|---|---|
-| GET | `/meetings/:meetingId/messages` | Mengambil chat history meeting |
-
----
-
-## WebSocket Event
-
-Namespace:
-
-```text
-/meetings
-```
-
-Connection URL:
-
-```text
-ws://localhost:3000/meetings
-```
-
-Authentication dapat dikirim melalui handshake auth.
-
-```json
-{
-  "token": "JWT_ACCESS_TOKEN"
-}
-```
-
-### Client to Server Events
-
-#### Join Meeting Room
-
-```text
-meeting:join
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid"
-}
-```
-
-#### Leave Meeting Room
-
-```text
-meeting:leave
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid"
-}
-```
-
-#### Send WebRTC Offer
-
-```text
-webrtc:offer
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid",
-  "to": "target-socket-id",
-  "sdp": {}
-}
-```
-
-#### Send WebRTC Answer
-
-```text
-webrtc:answer
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid",
-  "to": "target-socket-id",
-  "sdp": {}
-}
-```
-
-#### Send ICE Candidate
-
-```text
-webrtc:ice-candidate
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid",
-  "to": "target-socket-id",
-  "candidate": {}
-}
-```
-
-#### Send Chat Message
-
-```text
-chat:send
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid",
-  "message": "Halo semuanya"
-}
-```
-
-#### Update Media Status
-
-```text
-media:toggle
-```
-
-Payload:
-
-```json
-{
-  "meetingId": "meeting-uuid",
-  "audioEnabled": true,
-  "videoEnabled": false
-}
-```
-
----
-
-### Server to Client Events
-
-| Event | Description |
-|---|---|
-| `meeting:joined` | User berhasil join room |
-| `meeting:left` | User berhasil leave room |
-| `participant:joined` | Ada participant baru |
-| `participant:left` | Ada participant keluar |
-| `participant:kicked` | Participant dikeluarkan host |
-| `meeting:ended` | Meeting diakhiri host |
-| `webrtc:offer` | Menerima SDP offer |
-| `webrtc:answer` | Menerima SDP answer |
-| `webrtc:ice-candidate` | Menerima ICE candidate |
-| `chat:new-message` | Menerima pesan chat baru |
-| `media:updated` | Status audio/video participant berubah |
-| `error` | Error dari server |
+| `meeting:join` | `{ meetingId, audioEnabled, videoEnabled }` | Joins socket room, emits `meeting:state` |
+| `webrtc:offer` | `{ to, from, sdp }` | Relay to target socket |
+| `webrtc:answer` | `{ to, from, sdp }` | Relay to target socket |
+| `webrtc:ice-candidate` | `{ to, from, candidate }` | Relay to target socket |
+| `media:toggle` | `{ meetingId, type, enabled }` | Persist + broadcast |
+| `chat:message` | `{ meetingId, message }` | Persist + broadcast |
+| `meeting:end` | `{ meetingId }` | HOST only |
+| `meeting:kick` | `{ meetingId, targetSocketId }` | HOST/CO_HOST only |
+| `hand:toggle` | `{ meetingId, raised }` | Broadcast to room |
+| `media:force-mute` | `{ meetingId, targetSocketId }` | HOST/CO_HOST only |
 
 ---
 
 ## Environment Variables
 
-Buat file `.env` berdasarkan contoh berikut:
-
 ```env
-APP_NAME=BeeCollab
-APP_PORT=3000
-NODE_ENV=development
-
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/BeeCollab
-
-JWT_SECRET=change_this_secret
-JWT_EXPIRES_IN=1d
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-CORS_ORIGIN=http://localhost:5173
+DATABASE_URL="postgresql://user:password@host:5432/dbname"
+JWT_SECRET="your_secure_random_secret"
+JWT_EXPIRES_IN="1d"
+PORT=3000
 ```
 
 ---
 
-## Cara Menjalankan Project
-
-### 1. Clone Repository
-
-```bash
-git clone <GITHUB_REPOSITORY_URL>
-cd bee-meet-backend
-```
-
-### 2. Install Dependencies
+## Setup
 
 ```bash
 npm install
-```
-
-### 3. Setup Environment
-
-```bash
-cp .env.example .env
-```
-
-Lalu sesuaikan isi file `.env`.
-
-### 4. Jalankan Database dan Redis
-
-Jika menggunakan Docker:
-
-```bash
-docker compose up -d postgres redis
-```
-
-### 5. Generate Prisma Client
-
-```bash
 npx prisma generate
-```
-
-### 6. Jalankan Migration
-
-```bash
-npx prisma migrate dev
-```
-
-### 7. Jalankan Server
-
-```bash
+npx prisma db push
 npm run start:dev
 ```
 
-Server akan berjalan di:
-
-```text
-http://localhost:3000
-```
-
-Swagger API documentation dapat diakses di:
-
-```text
-http://localhost:3000/api/docs
-```
+Swagger UI: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
 
 ---
 
-## Testing
-
-Menjalankan unit test:
+## Deployment (VPS)
 
 ```bash
-npm run test
+git pull origin joshua
+npm install
+npm run build
+pm2 restart beecollab-backend
 ```
-
-Menjalankan end-to-end test:
-
-```bash
-npm run test:e2e
-```
-
-Menjalankan test coverage:
-
-```bash
-npm run test:cov
-```
-
----
-
-## Roadmap
-
-### MVP
-- [ ] Register dan login user
-- [ ] JWT authentication
-- [ ] Create meeting
-- [ ] Join meeting
-- [ ] Leave meeting
-- [ ] End meeting
-- [ ] WebSocket gateway
-- [ ] WebRTC signaling
-- [ ] Chat real-time
-- [ ] Participant list
-
-### Next Development
-- [ ] Schedule meeting
-- [ ] Waiting room
-- [ ] Meeting password
-- [ ] Host approval sebelum join
-- [ ] Screen sharing signaling
-- [ ] Recording metadata
-- [ ] Email invitation
-- [ ] Redis adapter untuk scaling WebSocket
-- [ ] SFU integration untuk meeting skala besar
-- [ ] Admin dashboard
-
----
-
-## Security Notes
-
-- Password harus disimpan dalam bentuk hash.
-- JWT secret tidak boleh di-commit ke repository.
-- Endpoint meeting harus dilindungi guard.
-- WebSocket handshake harus memvalidasi token.
-- Host-only action seperti end meeting dan kick participant harus divalidasi role-nya.
-- Rate limiting perlu ditambahkan untuk endpoint login dan WebSocket event tertentu.
-- CORS harus dibatasi sesuai domain frontend.
 
 ---
 
 ## Author
 
-**2802484110 - Reiki Indrasyahdewa Kierana**
-
-Project: **BeeCollab - Live Meeting Backend**
-
----
-
-## Kesimpulan
-
-BeeCollab Backend adalah fondasi untuk aplikasi live meeting berbasis NestJS. Backend ini menangani authentication, meeting room, participant management, chat, dan WebRTC signaling. Dengan arsitektur modular, project ini dapat dikembangkan dari MVP sederhana menjadi aplikasi meeting yang lebih scalable dan production-ready.
+**2802484110 — Reiki Indrasyahdewa Kierana**
+Project: BeeCollab — Live Meeting Backend
