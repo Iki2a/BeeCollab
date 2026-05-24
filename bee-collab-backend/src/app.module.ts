@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -10,11 +11,15 @@ import { UsersModule } from './users/users.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { ChatModule } from './chat/chat.module';
 import { SignalingModule } from './signaling/signaling.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    // EventEmitterModule must be global so EventEmitter2 can be injected
+    // in any service without an explicit import.
+    EventEmitterModule.forRoot({ wildcard: false, global: true }),
     PrismaModule,
     RepositoryModule,
     AuthModule,
@@ -22,6 +27,7 @@ import { SignalingModule } from './signaling/signaling.module';
     MeetingsModule,
     ChatModule,
     SignalingModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

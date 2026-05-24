@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MeetingStatus, ParticipantRole } from '@prisma/client';
 import type { IMeetingRepository } from '../repositories/interfaces/meeting.repository.interface';
 import type { IParticipantRepository } from '../repositories/interfaces/participant.repository.interface';
@@ -8,6 +9,11 @@ import {
   PARTICIPANT_REPOSITORY,
   CHAT_REPOSITORY,
 } from '../repositories/tokens';
+import {
+  MeetingEndedEvent,
+  ParticipantJoinedEvent,
+  ParticipantLeftEvent,
+} from '../events/meeting.events';
 
 @Injectable()
 export class SignalingService {
@@ -18,6 +24,7 @@ export class SignalingService {
     private readonly participantRepository: IParticipantRepository,
     @Inject(CHAT_REPOSITORY)
     private readonly chatRepository: IChatRepository,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -56,6 +63,13 @@ export class SignalingService {
         { status: MeetingStatus.LIVE, startedAt: new Date() },
       ),
     ]);
+
+    // Publish: notify all observers that a participant has joined
+    this.eventEmitter.emit(
+      'participant.joined',
+      new ParticipantJoinedEvent(meetingId, userId, socketId),
+    );
+
     return participant;
   }
 
@@ -71,6 +85,13 @@ export class SignalingService {
       socketId: null,
       leftAt: new Date(),
     });
+
+    // Publish: notify all observers that a participant has left.
+    // The MeetingEventsListener will auto-end the meeting if no one remains.
+    this.eventEmitter.emit(
+      'participant.left',
+      new ParticipantLeftEvent(participant.meetingId, participant.userId, socketId),
+    );
 
     return participant;
   }
@@ -146,6 +167,14 @@ export class SignalingService {
 
     await this.participantRepository.deleteMany(meetingId);
     await this.chatRepository.deleteMany(meetingId);
-    return this.meetingRepository.delete(meetingId);
+    const deleted = await this.meetingRepository.delete(meetingId);
+
+    // Publish: meeting ended via WebSocket by the host
+    this.eventEmitter.emit(
+      'meeting.ended',
+      new MeetingEndedEvent(meetingId, 'ws_ended'),
+    );
+
+    return deleted;
   }
 }

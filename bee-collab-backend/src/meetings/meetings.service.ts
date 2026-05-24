@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MeetingStatus, ParticipantRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { CreateMeetingDto, JoinMeetingDto } from './dto/meeting.dto';
@@ -16,6 +17,7 @@ import {
   PARTICIPANT_REPOSITORY,
   CHAT_REPOSITORY,
 } from '../repositories/tokens';
+import { MeetingEndedEvent } from '../events/meeting.events';
 
 @Injectable()
 export class MeetingsService {
@@ -26,6 +28,7 @@ export class MeetingsService {
     private readonly participantRepository: IParticipantRepository,
     @Inject(CHAT_REPOSITORY)
     private readonly chatRepository: IChatRepository,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /** Generate a short, unique, readable room code */
@@ -82,7 +85,15 @@ export class MeetingsService {
 
     await this.participantRepository.deleteMany(meetingId);
     await this.chatRepository.deleteMany(meetingId);
-    return this.meetingRepository.delete(meetingId);
+    const deleted = await this.meetingRepository.delete(meetingId);
+
+    // Publish: meeting ended via REST by the host
+    this.eventEmitter.emit(
+      'meeting.ended',
+      new MeetingEndedEvent(meetingId, 'host_ended'),
+    );
+
+    return deleted;
   }
 
   async getMyMeetings(hostId: string) {
