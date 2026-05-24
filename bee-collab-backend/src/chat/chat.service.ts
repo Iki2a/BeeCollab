@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Inject, Injectable } from '@nestjs/common';
 import { MessageType } from '@prisma/client';
+import type { IChatRepository } from '../repositories/interfaces/chat.repository.interface';
+import { CHAT_REPOSITORY } from '../repositories/tokens';
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(CHAT_REPOSITORY)
+    private readonly chatRepository: IChatRepository,
+  ) {}
 
   async saveMessage(
     meetingId: string,
@@ -12,21 +16,10 @@ export class ChatService {
     message: string,
     type: MessageType = MessageType.TEXT,
   ) {
-    return this.prisma.chatMessage.create({
-      data: { meetingId, senderId, message, type },
-      include: {
-        sender: { select: { id: true, name: true, avatarUrl: true } },
-      },
-    });
+    return this.chatRepository.create(meetingId, senderId, message, type);
   }
 
   async getMessages(meetingId: string) {
-    return this.prisma.chatMessage.findMany({
-      where: { meetingId },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        sender: { select: { id: true, name: true, avatarUrl: true } },
-      },
-    });
+    return this.chatRepository.findMany(meetingId);
   }
 }

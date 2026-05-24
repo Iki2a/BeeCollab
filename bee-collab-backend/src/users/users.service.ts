@@ -1,21 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import type { IUserRepository } from '../repositories/interfaces/user.repository.interface';
+import { USER_REPOSITORY } from '../repositories/tokens';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
+  ) {}
 
   async getProfile(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatarUrl: true,
-        createdAt: true,
-      },
-    });
+    const user = await this.userRepository.findProfile(userId);
     if (!user) throw new NotFoundException('User not found');
     return user;
   }

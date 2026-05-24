@@ -1,7 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { MeetingStatus } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { IMeetingRepository } from '../repositories/interfaces/meeting.repository.interface';
+import type { IParticipantRepository } from '../repositories/interfaces/participant.repository.interface';
+import type { IChatRepository } from '../repositories/interfaces/chat.repository.interface';
+import {
+  MEETING_REPOSITORY,
+  PARTICIPANT_REPOSITORY,
+  CHAT_REPOSITORY,
+} from '../repositories/tokens';
 import { SignalingGateway } from '../signaling/signaling.gateway';
 
 @Injectable()
@@ -10,9 +16,14 @@ export class MeetingsCleanupService {
   private running = false;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(MEETING_REPOSITORY)
+    private readonly meetingRepository: IMeetingRepository,
+    @Inject(PARTICIPANT_REPOSITORY)
+    private readonly participantRepository: IParticipantRepository,
+    @Inject(CHAT_REPOSITORY)
+    private readonly chatRepository: IChatRepository,
     private readonly signalingGateway: SignalingGateway,
-  ) { }
+  ) {}
 
   @Interval(30000)
   async closeExpiredMeetings() {
@@ -21,10 +32,7 @@ export class MeetingsCleanupService {
     this.running = true;
     try {
       const now = new Date();
-      const meetings = await this.prisma.meeting.findMany({
-        where: { status: MeetingStatus.LIVE, startedAt: { not: null } },
-        select: { id: true, startedAt: true, duration: true },
-      });
+      const meetings = await this.meetingRepository.findLiveMeetings();
 
       const expired = meetings.filter((meeting) => {
         if (!meeting.startedAt) return false;
@@ -40,13 +48,9 @@ export class MeetingsCleanupService {
           'Pertemuan berakhir karena durasi habis.',
         );
 
-        await this.prisma.$transaction([
-          this.prisma.participant.deleteMany({
-            where: { meetingId: meeting.id },
-          }),
-          this.prisma.chatMessage.deleteMany({ where: { meetingId: meeting.id } }),
-          this.prisma.meeting.delete({ where: { id: meeting.id } }),
-        ]);
+        await this.participantRepository.deleteMany(meeting.id);
+        await this.chatRepository.deleteMany(meeting.id);
+        await this.meetingRepository.delete(meeting.id);
       }
 
       if (expired.length > 0) {

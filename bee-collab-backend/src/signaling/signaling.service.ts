@@ -1,42 +1,60 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Inject, Injectable } from '@nestjs/common';
 import { MeetingStatus, ParticipantRole } from '@prisma/client';
+import type { IMeetingRepository } from '../repositories/interfaces/meeting.repository.interface';
+import type { IParticipantRepository } from '../repositories/interfaces/participant.repository.interface';
+import type { IChatRepository } from '../repositories/interfaces/chat.repository.interface';
+import {
+  MEETING_REPOSITORY,
+  PARTICIPANT_REPOSITORY,
+  CHAT_REPOSITORY,
+} from '../repositories/tokens';
 
 @Injectable()
 export class SignalingService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    @Inject(MEETING_REPOSITORY)
+    private readonly meetingRepository: IMeetingRepository,
+    @Inject(PARTICIPANT_REPOSITORY)
+    private readonly participantRepository: IParticipantRepository,
+    @Inject(CHAT_REPOSITORY)
+    private readonly chatRepository: IChatRepository,
+  ) {}
 
   /**
    * Called on `meeting:join` WS event.
    * Updates participant socketId and sets meeting LIVE if it's still SCHEDULED.
    */
-  async handleJoin(meetingId: string, userId: string, socketId: string, audioEnabled?: boolean, videoEnabled?: boolean) {
+  async handleJoin(
+    meetingId: string,
+    userId: string,
+    socketId: string,
+    audioEnabled?: boolean,
+    videoEnabled?: boolean,
+  ) {
     const [participant] = await Promise.all([
-      this.prisma.participant.upsert({
-        where: { meetingId_userId: { meetingId, userId } },
-        create: {
+      this.participantRepository.upsert(
+        meetingId,
+        userId,
+        {
           meetingId,
           userId,
           socketId,
-          role: 'PARTICIPANT',
+          role: ParticipantRole.PARTICIPANT,
           audioEnabled: audioEnabled ?? false,
-          videoEnabled: videoEnabled ?? false
+          videoEnabled: videoEnabled ?? false,
         },
-        update: {
+        {
           socketId,
           leftAt: null,
           ...(audioEnabled !== undefined ? { audioEnabled } : {}),
-          ...(videoEnabled !== undefined ? { videoEnabled } : {})
+          ...(videoEnabled !== undefined ? { videoEnabled } : {}),
         },
-        include: {
-          user: { select: { id: true, name: true, avatarUrl: true } },
-        },
-      }),
-      // Auto-start meeting when first real participant joins
-      this.prisma.meeting.updateMany({
-        where: { id: meetingId, status: MeetingStatus.SCHEDULED },
-        data: { status: MeetingStatus.LIVE, startedAt: new Date() },
-      }),
+      ),
+      // Auto-start meeting when first participant joins
+      this.meetingRepository.updateManyStatus(
+        { id: meetingId, status: MeetingStatus.SCHEDULED },
+        { status: MeetingStatus.LIVE, startedAt: new Date() },
+      ),
     ]);
     return participant;
   }
@@ -46,18 +64,12 @@ export class SignalingService {
    * Nullifies socketId and sets leftAt timestamp.
    */
   async handleDisconnect(socketId: string) {
-    const participant = await this.prisma.participant.findFirst({
-      where: { socketId },
-      include: {
-        user: { select: { id: true, name: true } },
-      },
-    });
-
+    const participant = await this.participantRepository.findBySocketId(socketId);
     if (!participant) return null;
 
-    await this.prisma.participant.update({
-      where: { id: participant.id },
-      data: { socketId: null, leftAt: new Date() },
+    await this.participantRepository.update(participant.id, {
+      socketId: null,
+      leftAt: new Date(),
     });
 
     return participant;
@@ -72,97 +84,68 @@ export class SignalingService {
     type: 'audio' | 'video',
     enabled: boolean,
   ) {
-    return this.prisma.participant.update({
-      where: { meetingId_userId: { meetingId, userId } },
-      data:
-        type === 'audio'
-          ? { audioEnabled: enabled }
-          : { videoEnabled: enabled },
-      include: {
-        user: { select: { id: true, name: true } },
-      },
+    return this.participantRepository.updateByMeetingAndUser(meetingId, userId, {
+      ...(type === 'audio' ? { audioEnabled: enabled } : { videoEnabled: enabled }),
     });
-  }
-
-  async getParticipantRole(meetingId: string, userId: string) {
-    const participant = await this.prisma.participant.findUnique({
-      where: { meetingId_userId: { meetingId, userId } },
-      select: { role: true },
-    });
-    return participant?.role ?? null;
   }
 
   async isHost(meetingId: string, userId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-      select: { hostId: true },
-    });
+    const meeting = await this.meetingRepository.findById(meetingId);
     return Boolean(meeting && meeting.hostId === userId);
   }
 
   async isHostOrCoHost(meetingId: string, userId: string) {
-    const role = await this.getParticipantRole(meetingId, userId);
-    if (role === 'HOST' || role === 'CO_HOST') return true;
-    return this.isHost(meetingId, userId);
+    // Single query: check participant role first, fallback to meeting hostId
+    const participant = await this.participantRepository.findByMeetingAndUser(meetingId, userId);
+    if (participant?.role === ParticipantRole.HOST || participant?.role === ParticipantRole.CO_HOST) {
+      return true;
+    }
+    const meeting = await this.meetingRepository.findById(meetingId);
+    return Boolean(meeting && meeting.hostId === userId);
   }
 
   async setParticipantRole(meetingId: string, targetUserId: string, role: ParticipantRole) {
-    return this.prisma.participant.update({
-      where: { meetingId_userId: { meetingId, userId: targetUserId } },
-      data: { role },
-      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
-    });
+    return this.participantRepository.updateByMeetingAndUser(meetingId, targetUserId, { role });
   }
 
   async kickParticipant(meetingId: string, targetSocketId: string) {
-    const participant = await this.prisma.participant.findFirst({
-      where: { meetingId, socketId: targetSocketId },
-      include: { user: { select: { id: true, name: true } } },
+    const participant = await this.participantRepository.findFirstByMeeting(meetingId, {
+      socketId: targetSocketId,
     });
     if (!participant) return null;
 
-    await this.prisma.participant.update({
-      where: { id: participant.id },
-      data: { socketId: null, leftAt: new Date() },
+    await this.participantRepository.update(participant.id, {
+      socketId: null,
+      leftAt: new Date(),
     });
 
     return participant;
   }
 
   async getParticipantBySocketId(meetingId: string, targetSocketId: string) {
-    return this.prisma.participant.findFirst({
-      where: { meetingId, socketId: targetSocketId },
-      include: { user: { select: { id: true, name: true } } },
+    return this.participantRepository.findFirstByMeeting(meetingId, {
+      socketId: targetSocketId,
     });
   }
 
   async forceMuteParticipant(meetingId: string, targetSocketId: string) {
-    const participant = await this.prisma.participant.findFirst({
-      where: { meetingId, socketId: targetSocketId },
+    const participant = await this.participantRepository.findFirstByMeeting(meetingId, {
+      socketId: targetSocketId,
     });
     if (!participant) return null;
 
-    return this.prisma.participant.update({
-      where: { id: participant.id },
-      data: { audioEnabled: false },
-      include: { user: { select: { id: true, name: true } } },
-    });
+    return this.participantRepository.update(participant.id, { audioEnabled: false });
   }
 
   /**
    * End meeting — only HOST can call this.
    */
   async endMeeting(meetingId: string, userId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-    });
+    const meeting = await this.meetingRepository.findById(meetingId);
     if (!meeting || meeting.hostId !== userId) return null;
 
-    await this.prisma.participant.deleteMany({ where: { meetingId } });
-    await this.prisma.chatMessage.deleteMany({ where: { meetingId } });
-
-    return this.prisma.meeting.delete({
-      where: { id: meetingId },
-    });
+    await this.participantRepository.deleteMany(meetingId);
+    await this.chatRepository.deleteMany(meetingId);
+    return this.meetingRepository.delete(meetingId);
   }
 }

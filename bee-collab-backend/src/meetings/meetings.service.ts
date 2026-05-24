@@ -1,17 +1,32 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateMeetingDto, JoinMeetingDto } from './dto/meeting.dto';
-import { randomBytes } from 'crypto';
 import { MeetingStatus, ParticipantRole } from '@prisma/client';
+import { randomBytes } from 'crypto';
+import { CreateMeetingDto, JoinMeetingDto } from './dto/meeting.dto';
+import type { IMeetingRepository } from '../repositories/interfaces/meeting.repository.interface';
+import type { IParticipantRepository } from '../repositories/interfaces/participant.repository.interface';
+import type { IChatRepository } from '../repositories/interfaces/chat.repository.interface';
+import {
+  MEETING_REPOSITORY,
+  PARTICIPANT_REPOSITORY,
+  CHAT_REPOSITORY,
+} from '../repositories/tokens';
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    @Inject(MEETING_REPOSITORY)
+    private readonly meetingRepository: IMeetingRepository,
+    @Inject(PARTICIPANT_REPOSITORY)
+    private readonly participantRepository: IParticipantRepository,
+    @Inject(CHAT_REPOSITORY)
+    private readonly chatRepository: IChatRepository,
+  ) {}
 
   /** Generate a short, unique, readable room code */
   private generateRoomCode(): string {
@@ -19,126 +34,69 @@ export class MeetingsService {
   }
 
   async createMeeting(hostId: string, dto: CreateMeetingDto) {
-    const roomCode = this.generateRoomCode();
-
-    const meeting = await this.prisma.meeting.create({
-      data: {
-        title: dto.title,
-        roomCode,
-        hostId,
-        maxParticipants: dto.maxParticipants ?? 10,
-        duration: dto.duration ?? 15,
-        status: MeetingStatus.SCHEDULED,
-        participants: {
-          create: {
-            userId: hostId,
-            role: ParticipantRole.HOST,
-          },
-        },
-      },
-      include: {
-        participants: {
-          include: {
-            user: { select: { id: true, name: true, avatarUrl: true } },
-          },
-        },
-      },
+    return this.meetingRepository.create({
+      title: dto.title,
+      roomCode: this.generateRoomCode(),
+      hostId,
+      maxParticipants: dto.maxParticipants ?? 10,
+      duration: dto.duration ?? 15,
+      status: MeetingStatus.SCHEDULED,
     });
-
-    return meeting;
   }
 
   async joinMeeting(userId: string, meetingId: string, dto: JoinMeetingDto) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-      include: { participants: true },
-    });
+    const meeting = await this.meetingRepository.findByIdWithParticipants(meetingId);
 
     if (!meeting) throw new NotFoundException('Meeting not found');
     if (meeting.status === MeetingStatus.ENDED)
       throw new BadRequestException('Meeting has ended');
     if (meeting.roomCode !== dto.roomCode)
       throw new ForbiddenException('Invalid room code');
-    if (meeting.participants.length >= meeting.maxParticipants)
+
+    // Only count active participants (fix: was counting all including ones who left)
+    const activeCount = meeting.participants.filter((p) => p.leftAt === null).length;
+    if (activeCount >= meeting.maxParticipants)
       throw new BadRequestException('Meeting is full');
 
-    // Upsert participant (handles re-join case)
-    const participant = await this.prisma.participant.upsert({
-      where: { meetingId_userId: { meetingId, userId } },
-      create: { meetingId, userId, role: ParticipantRole.PARTICIPANT },
-      update: { leftAt: null }, // re-activate if they left before
-    });
+    const participant = await this.participantRepository.upsert(
+      meetingId,
+      userId,
+      { meetingId, userId, role: ParticipantRole.PARTICIPANT, audioEnabled: false, videoEnabled: false },
+      { leftAt: null },
+    );
 
     return { meeting, participant };
   }
 
   async getParticipants(meetingId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-    });
+    const meeting = await this.meetingRepository.findById(meetingId);
     if (!meeting) throw new NotFoundException('Meeting not found');
-
-    return this.prisma.participant.findMany({
-      where: { meetingId, leftAt: null },
-      include: {
-        user: { select: { id: true, name: true, avatarUrl: true } },
-      },
-    });
+    return this.participantRepository.findManyByMeeting(meetingId, true);
   }
 
   async endMeeting(hostId: string, meetingId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-    });
+    const meeting = await this.meetingRepository.findById(meetingId);
     if (!meeting) throw new NotFoundException('Meeting not found');
     if (meeting.hostId !== hostId)
       throw new ForbiddenException('Only the host can end the meeting');
 
-    await this.prisma.participant.deleteMany({ where: { meetingId } });
-    await this.prisma.chatMessage.deleteMany({ where: { meetingId } });
-
-    return this.prisma.meeting.delete({
-      where: { id: meetingId },
-    });
+    await this.participantRepository.deleteMany(meetingId);
+    await this.chatRepository.deleteMany(meetingId);
+    return this.meetingRepository.delete(meetingId);
   }
 
   async getMyMeetings(hostId: string) {
-    return this.prisma.meeting.findMany({
-      where: { hostId },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.meetingRepository.findByHostId(hostId);
   }
 
   async getMeetingById(meetingId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-      include: {
-        host: { select: { id: true, name: true, avatarUrl: true } },
-        participants: {
-          where: { leftAt: null },
-          include: {
-            user: { select: { id: true, name: true, avatarUrl: true } },
-          },
-        },
-      },
-    });
+    const meeting = await this.meetingRepository.findByIdWithDetails(meetingId);
     if (!meeting) throw new NotFoundException('Meeting not found');
     return meeting;
   }
 
   async getMeetingByRoomCode(roomCode: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { roomCode },
-      include: {
-        host: { select: { id: true, name: true, avatarUrl: true } },
-        participants: {
-          where: { leftAt: null },
-          include: {
-            user: { select: { id: true, name: true, avatarUrl: true } },
-          },
-        },
-      },
-    });
+    const meeting = await this.meetingRepository.findByRoomCode(roomCode);
     if (!meeting) throw new NotFoundException('Meeting not found');
     return meeting;
   }

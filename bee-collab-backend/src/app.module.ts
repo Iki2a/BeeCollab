@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { RepositoryModule } from './repositories/repository.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MeetingsModule } from './meetings/meetings.module';
@@ -15,6 +16,7 @@ import { SignalingModule } from './signaling/signaling.module';
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    RepositoryModule,
     AuthModule,
     UsersModule,
     MeetingsModule,
