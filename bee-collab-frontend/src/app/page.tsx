@@ -12,6 +12,10 @@ const getApiBase = () => {
   return `http://${window.location.hostname}:3000`;
 };
 
+// Unwrap ApiResponse envelope { success, data, ... } → data
+// Falls back to the raw value for backward compatibility
+const unwrap = <T = any>(json: any): T => json?.data ?? json;
+
 export default function Home() {
   const router = useRouter();
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
@@ -44,7 +48,8 @@ export default function Home() {
           console.error(`Failed to fetch meetings: ${res.status} ${errorText}`);
           return [];
         })
-        .then(data => {
+        .then(json => {
+          const data = unwrap<any[]>(json);
           if (Array.isArray(data) && data.length > 0) {
             setHasActiveMeeting(true);
             setActiveMeetingId(data[0]?.id || null);
@@ -120,7 +125,7 @@ export default function Home() {
         });
 
         if (res.ok) {
-          const data = await res.json();
+          const data = unwrap(await res.json());
           router.push(`/meeting/${data.id}`);
         } else {
           // If not found by code, maybe it's already an ID
@@ -176,7 +181,7 @@ export default function Home() {
         })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = unwrap(await res.json());
         const elapsed = Date.now() - startedAt;
         if (elapsed < minLoadingMs) {
           await new Promise(resolve => setTimeout(resolve, minLoadingMs - elapsed));

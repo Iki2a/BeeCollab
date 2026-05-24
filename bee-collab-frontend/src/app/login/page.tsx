@@ -10,6 +10,9 @@ const getApiBase = () => {
   return `http://${window.location.hostname}:3000`;
 };
 
+// Unwrap ApiResponse envelope { success, data, ... } → data
+const unwrap = <T = any>(json: any): T => json?.data ?? json;
+
 export default function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -44,19 +47,20 @@ export default function AuthPage() {
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const json = await res.json();
 
       if (res.ok) {
+        const data = unwrap(json);
         if (data.access_token) {
           localStorage.setItem('token', data.access_token);
           router.push('/');
         } else if (mode === 'register') {
-          // If register success but no token (auto-login not implemented in backend register), switch to login
           setMode('login');
           setError('Registration successful! Please login.');
         }
       } else {
-        setError(data.message || `${mode === 'login' ? 'Login' : 'Registration'} failed`);
+        // Error shape: { success: false, error: '...', statusCode: ... }
+        setError(json.error || json.message || `${mode === 'login' ? 'Login' : 'Registration'} failed`);
       }
     } catch (err) {
       setError('Cannot connect to server. Is backend running?');

@@ -17,6 +17,9 @@ const getApiBase = () => {
   return `http://${window.location.hostname}:3000`;
 };
 
+// Unwrap ApiResponse envelope { success, data, ... } → data
+const unwrap = <T = any>(json: any): T => json?.data ?? json;
+
 const getWsBase = () => {
   const apiBase = getApiBase();
   if (!apiBase) return '';
@@ -801,7 +804,7 @@ export default function Meeting() {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
-            const data = await res.json();
+            const data = unwrap(await res.json());
             router.replace(`/meeting/${data.id}`);
           }
         } catch (e) {
@@ -1054,7 +1057,7 @@ export default function Meeting() {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
-          const data = await res.json();
+          const data = unwrap(await res.json());
           const participantUsers = (data.participants || []).reduce(
             (acc: Record<string, { name: string; avatarUrl?: string | null }>, participant: any) => {
               if (participant?.user?.id) {
@@ -1086,7 +1089,7 @@ export default function Meeting() {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (meRes.ok) {
-            const meData = await meRes.json();
+            const meData = unwrap(await meRes.json());
             setCurrentUserId(meData.id);
             setIsHost(data.hostId === meData.id);
           }
