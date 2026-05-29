@@ -103,10 +103,14 @@ export class SignalingGateway
 
   emitMeetingEnded(meetingId: string, reason?: string) {
     if (!this.server) return;
+    this.server.to(meetingId).emit('meeting:ended', { meetingId, reason });
+  }
 
-    this.server
-      .to(meetingId)
-      .emit('meeting:ended', { meetingId, reason });
+  /** Returns the number of active socket connections in a meeting room */
+  async getRoomSocketCount(meetingId: string): Promise<number> {
+    if (!this.server) return 0;
+    const sockets = await this.server.in(meetingId).fetchSockets();
+    return sockets.length;
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -126,13 +130,22 @@ export class SignalingGateway
   }
 
   async handleDisconnect(client: Socket) {
+    const data = client.data as SocketData;
     const participant = await this.signalingService.handleDisconnect(client.id);
 
     if (participant) {
+      // Registered user — DB record updated by service
       this.server.to(participant.meetingId).emit('participant:left', {
         socketId: client.id,
         userId: participant.userId,
         user: participant.user,
+      });
+    } else if (data?.user?.isGuest && data?.meetingId) {
+      // Guest user — no DB record, emit leave using socket.data
+      this.server.to(data.meetingId).emit('participant:left', {
+        socketId: client.id,
+        userId: data.user.sub,
+        user: data.profile,
       });
     }
 
@@ -149,7 +162,7 @@ export class SignalingGateway
   ) {
     const user = getUser(client);
 
-    // Disconnect any existing tabs/sockets for the same user in this meeting
+    // Disconnect duplicate tabs for the same user in this meeting
     const existingSockets = await this.server.in(payload.meetingId).fetchSockets();
     for (const socket of existingSockets) {
       if ((socket.data as SocketData).user?.sub === user.sub && socket.id !== client.id) {
@@ -158,33 +171,53 @@ export class SignalingGateway
       }
     }
 
-    const participant = await this.signalingService.handleJoin(
-      payload.meetingId,
-      user.sub,
-      client.id,
-      payload.audioEnabled,
-      payload.videoEnabled,
-    );
+    // Always store meetingId so handleDisconnect can reference it for guests
+    client.data.meetingId = payload.meetingId;
+
+    let profile: { id: string; name: string; avatarUrl: string | null };
+    let role: 'HOST' | 'CO_HOST' | 'PARTICIPANT' = 'PARTICIPANT';
+    let audioEnabled = payload.audioEnabled ?? false;
+    let videoEnabled = payload.videoEnabled ?? false;
+
+    if (user.isGuest) {
+      // ── Guest path: no DB operations, identity lives in the JWT ───────────
+      profile = { id: user.sub, name: user.name ?? 'Guest', avatarUrl: null };
+      // Ensure the meeting transitions SCHEDULED → LIVE even for guest-only joins
+      await this.signalingService.startMeetingIfScheduled(payload.meetingId);
+    } else {
+      // ── Registered user path: persist to DB ───────────────────────────────
+      const participant = await this.signalingService.handleJoin(
+        payload.meetingId,
+        user.sub,
+        client.id,
+        audioEnabled,
+        videoEnabled,
+      );
+      profile = {
+        id: participant.user.id,
+        name: participant.user.name,
+        avatarUrl: participant.user.avatarUrl,
+      };
+      role = participant.role as 'HOST' | 'CO_HOST' | 'PARTICIPANT';
+      audioEnabled = participant.audioEnabled;
+      videoEnabled = participant.videoEnabled;
+    }
 
     await client.join(payload.meetingId);
 
     client.to(payload.meetingId).emit('participant:joined', {
       socketId: client.id,
       userId: user.sub,
-      user: participant.user,
-      role: participant.role,
-      audioEnabled: participant.audioEnabled,
-      videoEnabled: participant.videoEnabled,
+      user: profile,
+      role,
+      audioEnabled,
+      videoEnabled,
     });
 
-    client.data.profile = {
-      id: participant.user.id,
-      name: participant.user.name,
-      avatarUrl: participant.user.avatarUrl,
-    };
-    client.data.audioEnabled = participant.audioEnabled;
-    client.data.videoEnabled = participant.videoEnabled;
-    client.data.role = participant.role;
+    client.data.profile = profile;
+    client.data.audioEnabled = audioEnabled;
+    client.data.videoEnabled = videoEnabled;
+    client.data.role = role;
 
     const sockets = await this.server.in(payload.meetingId).fetchSockets();
     client.emit('meeting:state', {
@@ -199,7 +232,7 @@ export class SignalingGateway
       })),
     });
 
-    // Fetch and send chat history to the new participant
+    // Send chat history to the new participant
     const history = await this.chatService.getMessages(payload.meetingId);
     client.emit('chat:history', history);
 

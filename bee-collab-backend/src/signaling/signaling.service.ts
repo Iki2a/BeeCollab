@@ -110,6 +110,17 @@ export class SignalingService {
     });
   }
 
+  /**
+   * Auto-start a SCHEDULED meeting to LIVE.
+   * Used by the gateway for guest joins that bypass the normal handleJoin DB path.
+   */
+  async startMeetingIfScheduled(meetingId: string): Promise<void> {
+    await this.meetingRepository.updateManyStatus(
+      { id: meetingId, status: MeetingStatus.SCHEDULED },
+      { status: MeetingStatus.LIVE, startedAt: new Date() },
+    );
+  }
+
   async isHost(meetingId: string, userId: string) {
     const meeting = await this.meetingRepository.findById(meetingId);
     return Boolean(meeting && meeting.hostId === userId);

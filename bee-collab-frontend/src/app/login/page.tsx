@@ -22,6 +22,9 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState('');
 
   useEffect(() => {
     if (localStorage.getItem('token')) {
@@ -216,6 +219,73 @@ export default function AuthPage() {
             style={{ background: 'none', border: 'none', color: '#5f6368', cursor: 'pointer', fontSize: '0.875rem', textDecoration: 'underline' }}
           >
             Back to Home
+          </button>
+        </div>
+
+        {/* Guest divider */}
+        <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ flex: 1, height: '1px', background: '#e1e4e8' }} />
+          <span style={{ fontSize: '0.75rem', color: '#5f6368', whiteSpace: 'nowrap' }}>or continue as guest</span>
+          <div style={{ flex: 1, height: '1px', background: '#e1e4e8' }} />
+        </div>
+
+        <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <p style={{ fontSize: '0.8rem', color: '#5f6368', textAlign: 'center', margin: 0 }}>
+            No account needed — just enter your name and join with a room code.
+          </p>
+          {guestError && (
+            <div style={{ color: '#d93025', background: '#fce8e6', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', textAlign: 'center' }}>
+              {guestError}
+            </div>
+          )}
+          <input
+            type="text"
+            placeholder="Your display name"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '1rem', outline: 'none', boxSizing: 'border-box' }}
+          />
+          <button
+            disabled={guestLoading || guestName.trim().length < 2}
+            onClick={async () => {
+              if (guestName.trim().length < 2) return;
+              setGuestLoading(true);
+              setGuestError('');
+              try {
+                const apiBase = getApiBase();
+                const res = await fetch(`${apiBase}/auth/guest`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: guestName.trim() }),
+                });
+                const json = await res.json();
+                if (res.ok) {
+                  const data = unwrap(json);
+                  localStorage.setItem('token', data.access_token);
+                  localStorage.setItem('guestName', guestName.trim());
+                  router.push('/');
+                } else {
+                  setGuestError(json.error || 'Failed to continue as guest');
+                }
+              } catch {
+                setGuestError('Cannot connect to server.');
+              } finally {
+                setGuestLoading(false);
+              }
+            }}
+            style={{
+              padding: '0.75rem',
+              borderRadius: '8px',
+              border: '1px solid #dadce0',
+              background: guestName.trim().length >= 2 ? '#f8f9fa' : '#f1f3f4',
+              color: guestName.trim().length >= 2 ? '#3c4043' : '#9aa0a6',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              cursor: guestName.trim().length >= 2 ? 'pointer' : 'not-allowed',
+              opacity: guestLoading ? 0.7 : 1,
+            }}
+          >
+            {guestLoading ? 'Joining...' : 'Continue as Guest'}
           </button>
         </div>
       </div>

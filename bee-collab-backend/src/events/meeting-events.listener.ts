@@ -84,12 +84,17 @@ export class MeetingEventsListener {
       `[AUDIT] Participant left — userId: ${event.userId}, meetingId: ${event.meetingId}`,
     );
 
-    // How many active (leftAt IS NULL) participants remain?
+    // How many active (leftAt IS NULL) registered participants remain?
     const active = await this.participantRepository.findManyByMeeting(
       event.meetingId,
       true, // activeOnly
     );
-    if (active.length > 0) return; // others still present — do nothing
+    if (active.length > 0) return; // registered users still present — do nothing
+
+    // Also check for guest connections (guests are not in the DB).
+    // If any socket is still in the room, do not auto-end.
+    const socketCount = await this.signalingGateway.getRoomSocketCount(event.meetingId);
+    if (socketCount > 0) return;
 
     // Guard: meeting may have already been cleaned up by another path
     const meeting = await this.meetingRepository.findById(event.meetingId);

@@ -1,7 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, GuestDto } from './dto/auth.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -23,5 +23,12 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid email or password.' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('guest')
+  @ApiOperation({ summary: 'Join as a guest — display name only, no account required' })
+  @ApiResponse({ status: 201, description: 'Returns a guest `access_token` valid for joining (not creating) meetings.' })
+  guest(@Body() dto: GuestDto) {
+    return this.authService.guestLogin(dto);
   }
 }

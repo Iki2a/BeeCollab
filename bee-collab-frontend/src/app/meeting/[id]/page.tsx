@@ -1117,14 +1117,24 @@ export default function Meeting() {
             hostId: data.host?.id || '',
             participantUsers,
           });
-          // Check our own user id
-          const meRes = await fetch(`${getApiBase()}/users/me`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (meRes.ok) {
-            const meData = unwrap(await meRes.json());
-            setCurrentUserId(meData.id);
-            setIsHost(data.hostId === meData.id);
+          // Resolve current user ID — guests use the JWT sub directly
+          const guestName = localStorage.getItem('guestName');
+          if (guestName) {
+            // Guest: decode sub from JWT without a DB call
+            try {
+              const payload = JSON.parse(atob((token ?? '').split('.')[1]));
+              setCurrentUserId(payload.sub ?? null);
+            } catch { /* ignore */ }
+            setIsHost(false); // guests can never be hosts
+          } else {
+            const meRes = await fetch(`${getApiBase()}/users/me`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (meRes.ok) {
+              const meData = unwrap(await meRes.json());
+              setCurrentUserId(meData.id);
+              setIsHost(data.hostId === meData.id);
+            }
           }
 
           // Once everything is loaded, stop joining state

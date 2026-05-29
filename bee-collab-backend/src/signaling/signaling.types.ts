@@ -4,7 +4,11 @@
  */
 export interface WsUser {
   sub: string;
-  email: string;
+  email?: string;
+  /** Guest display name — present only on guest tokens */
+  name?: string;
+  /** True when the socket belongs to a guest (no DB user record) */
+  isGuest?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -22,4 +26,6 @@ export interface SocketData {
   role?: 'HOST' | 'CO_HOST' | 'PARTICIPANT';
   audioEnabled?: boolean;
   videoEnabled?: boolean;
+  /** Meeting room ID — stored on join so disconnect can reference it */
+  meetingId?: string;
 }

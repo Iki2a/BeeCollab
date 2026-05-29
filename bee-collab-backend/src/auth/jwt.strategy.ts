@@ -21,6 +21,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    // Guest tokens carry identity in the JWT itself — no DB record exists
+    if (payload.isGuest) {
+      return { id: payload.sub, name: payload.name ?? 'Guest', isGuest: true };
+    }
     const user = await this.userRepository.findById(payload.sub);
     if (!user) throw new UnauthorizedException('User not found');
     return user;

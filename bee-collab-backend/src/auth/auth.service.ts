@@ -5,7 +5,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, GuestDto } from './dto/auth.dto';
+import { randomUUID } from 'crypto';
 import type { IUserRepository } from '../repositories/interfaces/user.repository.interface';
 import { USER_REPOSITORY } from '../repositories/tokens';
 import * as bcrypt from 'bcrypt';
@@ -41,6 +42,16 @@ export class AuthService {
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.signToken(user.id, user.email);
+  }
+
+  /** Issue a guest JWT — no DB record, display name only */
+  guestLogin(dto: GuestDto) {
+    const payload = {
+      sub: `guest_${randomUUID()}`,
+      name: dto.name,
+      isGuest: true,
+    };
+    return { access_token: this.jwtService.sign(payload) };
   }
 
   private signToken(userId: string, email: string) {

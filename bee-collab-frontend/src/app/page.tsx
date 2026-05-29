@@ -30,6 +30,12 @@ export default function Home() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
+  const [guestJoinName, setGuestJoinName] = useState('');
+  const [guestJoinCode, setGuestJoinCode] = useState('');
+  const [guestJoinError, setGuestJoinError] = useState('');
+  const [guestJoinLoading, setGuestJoinLoading] = useState(false);
+  const [showGuestJoin, setShowGuestJoin] = useState(false);
 
   useEffect(() => {
     const apiBase = getApiBase();
@@ -37,18 +43,25 @@ export default function Home() {
     if (token) {
       setIsLoggedIn(true);
 
-      // Fetch logged-in user's display name
-      fetch(`${apiBase}/users/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => res.ok ? res.json() : null)
-        .then(json => {
-          if (json) {
-            const me = unwrap(json);
-            setUserName(me?.name ?? null);
-          }
+      const storedGuestName = localStorage.getItem('guestName');
+      if (storedGuestName) {
+        // Guest user — name already known from localStorage
+        setIsGuest(true);
+        setUserName(storedGuestName);
+      } else {
+        // Registered user — fetch display name
+        fetch(`${apiBase}/users/me`, {
+          headers: { Authorization: `Bearer ${token}` }
         })
-        .catch(() => {});
+          .then(res => res.ok ? res.json() : null)
+          .then(json => {
+            if (json) {
+              const me = unwrap(json);
+              setUserName(me?.name ?? null);
+            }
+          })
+          .catch(() => {});
+      }
 
       fetch(`${apiBase}/meetings`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -119,12 +132,42 @@ export default function Home() {
 
   const performLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('guestName');
     setIsLoggedIn(false);
+    setIsGuest(false);
     setHasActiveMeeting(false);
     setActiveMeetingId(null);
     setUserName(null);
     setShowLogoutConfirm(false);
     router.refresh();
+  };
+
+  const handleGuestJoin = async () => {
+    if (guestJoinName.trim().length < 2) { setGuestJoinError('Name must be at least 2 characters.'); return; }
+    if (!guestJoinCode.trim()) { setGuestJoinError('Please enter a room code.'); return; }
+    setGuestJoinLoading(true);
+    setGuestJoinError('');
+    try {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/auth/guest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: guestJoinName.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        const data = unwrap(json);
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('guestName', guestJoinName.trim());
+        router.push(`/meeting/${guestJoinCode.trim()}`);
+      } else {
+        setGuestJoinError(json.error || 'Failed to join as guest');
+      }
+    } catch {
+      setGuestJoinError('Cannot connect to server.');
+    } finally {
+      setGuestJoinLoading(false);
+    }
   };
 
   // Silent logout for invalid-token (401) cases — no confirmation needed
@@ -239,8 +282,8 @@ export default function Home() {
           {isLoggedIn ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {userName && (
-                <span style={{ fontSize: '0.875rem', color: '#3c4043', fontWeight: 500 }}>
-                  👤 {userName}
+                <span style={{ fontSize: '0.875rem', color: isGuest ? '#e37400' : '#3c4043', fontWeight: 500 }}>
+                  {isGuest ? '👤 Guest: ' : '👤 '}{userName}
                 </span>
               )}
               <button
@@ -248,7 +291,7 @@ export default function Home() {
                 onClick={() => setShowLogoutConfirm(true)}
                 style={{ background: 'none', border: '1px solid #dadce0', color: '#d93025', fontWeight: 500, fontSize: '14px', cursor: 'pointer', padding: '8px 16px', borderRadius: '4px' }}
               >
-                Logout
+                {isGuest ? 'Exit Guest' : 'Logout'}
               </button>
             </div>
           ) : (
@@ -304,6 +347,7 @@ export default function Home() {
               <button
                 className={styles.newMeetingBtn}
                 onClick={() => {
+                  if (isGuest) return;
                   if (hasActiveMeeting && activeMeetingId) {
                     router.push(`/meeting/${activeMeetingId}`);
                     return;
@@ -311,7 +355,8 @@ export default function Home() {
                   setNewMeetingError('');
                   setIsCreating(true);
                 }}
-                title={hasActiveMeeting ? "Resume active meeting" : "Create new meeting"}
+                title={isGuest ? "Guests cannot create meetings" : hasActiveMeeting ? "Resume active meeting" : "Create new meeting"}
+                style={{ opacity: isGuest ? 0.45 : 1, cursor: isGuest ? 'not-allowed' : 'pointer' }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z" />
@@ -347,6 +392,58 @@ export default function Home() {
           )}
 
           <div className={styles.divider}></div>
+
+          {/* Guest join panel — shown to non-logged-in users */}
+          {!isLoggedIn && (
+            <div style={{ marginTop: '0.5rem' }}>
+              {!showGuestJoin ? (
+                <p style={{ fontSize: '0.875rem', color: '#5f6368', textAlign: 'center' }}>
+                  No account?{' '}
+                  <button
+                    onClick={() => setShowGuestJoin(true)}
+                    style={{ background: 'none', border: 'none', color: '#1a73e8', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: '0.875rem' }}
+                  >
+                    Join as Guest
+                  </button>
+                </p>
+              ) : (
+                <div style={{ background: '#f8f9fa', border: '1px solid #e1e4e8', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem', color: '#202124' }}>Join as Guest</p>
+                  <input
+                    type="text"
+                    placeholder="Your display name"
+                    value={guestJoinName}
+                    onChange={e => setGuestJoinName(e.target.value)}
+                    style={{ padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '0.95rem', outline: 'none' }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Room code (e.g. A1B2C3D4)"
+                    value={guestJoinCode}
+                    onChange={e => setGuestJoinCode(e.target.value.toUpperCase())}
+                    onKeyDown={e => e.key === 'Enter' && handleGuestJoin()}
+                    style={{ padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #dadce0', fontSize: '0.95rem', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                  />
+                  {guestJoinError && (
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#d93025' }}>{guestJoinError}</p>
+                  )}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={() => { setShowGuestJoin(false); setGuestJoinError(''); }} style={{ flex: 1, padding: '0.65rem', borderRadius: '8px', border: '1px solid #dadce0', background: 'transparent', cursor: 'pointer', fontSize: '0.875rem', color: '#5f6368' }}>
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleGuestJoin}
+                      disabled={guestJoinLoading}
+                      style={{ flex: 2, padding: '0.65rem', borderRadius: '8px', border: 'none', background: '#1a73e8', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem', opacity: guestJoinLoading ? 0.7 : 1 }}
+                    >
+                      {guestJoinLoading ? 'Joining...' : 'Join Meeting'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={styles.learnMore}>
             <a href="#" className={styles.learnMoreLink}>Learn more</a> about BeeCollab
           </div>

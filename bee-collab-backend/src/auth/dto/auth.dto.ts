@@ -9,7 +9,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  email?: string;
+  /** Present only on guest tokens */
+  name?: string;
+  /** True when the token belongs to a guest (no DB user record) */
+  isGuest?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -43,4 +47,11 @@ export class LoginDto {
   @ApiProperty({ example: 'secret123', description: 'Account password' })
   @IsString()
   password: string;
+}
+
+export class GuestDto {
+  @ApiProperty({ example: 'John Doe', description: 'Display name shown to other participants (min 2 chars)' })
+  @IsString()
+  @MinLength(2)
+  name: string;
 }
