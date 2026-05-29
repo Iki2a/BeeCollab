@@ -86,6 +86,8 @@ export default function Meeting() {
   const mediaEnabledRef = useRef(mediaEnabled);
   const pendingMediaSyncRef = useRef(false);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  // Always points to the latest toggleMedia — avoids stale closure in WS listeners
+  const toggleMediaRef = useRef<(type: 'audio' | 'video') => Promise<void>>(() => Promise.resolve());
   type PeerState = {
     pc: RTCPeerConnection;
     makingOffer: boolean;
@@ -799,7 +801,8 @@ export default function Meeting() {
 
     const token = localStorage.getItem('token');
     if (!token) {
-      router.push('/login');
+      // Preserve the meeting URL so guest/login flow can redirect back
+      router.push(`/login?redirect=/meeting/${meetingId}`);
       return;
     }
 
@@ -1001,14 +1004,15 @@ export default function Meeting() {
 
     newSocket.on('media:force-mute', () => {
       if (mediaEnabledRef.current.audio) {
-        toggleMedia('audio');
+        toggleMediaRef.current('audio');
       }
     });
 
     newSocket.on('media:ask-unmute', () => {
       const agree = window.confirm('The host is asking you to unmute. Unmute now?');
       if (agree && !mediaEnabledRef.current.audio) {
-        toggleMedia('audio');
+        // Use ref so we always call the latest toggleMedia, not the stale closure
+        toggleMediaRef.current('audio');
       }
     });
 
@@ -1121,9 +1125,14 @@ export default function Meeting() {
           const guestName = localStorage.getItem('guestName');
           if (guestName) {
             // Guest: decode sub from JWT without a DB call
+            // JWT uses base64url (no padding, - and _ instead of + and /)
+            // so we must normalise before passing to atob.
             try {
-              const payload = JSON.parse(atob((token ?? '').split('.')[1]));
-              setCurrentUserId(payload.sub ?? null);
+              const b64 = (token ?? '').split('.')[1]
+                .replace(/-/g, '+').replace(/_/g, '/');
+              const padded = b64.padEnd(b64.length + (4 - b64.length % 4) % 4, '=');
+              const jwtPayload = JSON.parse(atob(padded));
+              setCurrentUserId(jwtPayload.sub ?? null);
             } catch { /* ignore */ }
             setIsHost(false); // guests can never be hosts
           } else {
@@ -1335,6 +1344,9 @@ export default function Meeting() {
       socket.emit('reaction:send', { meetingId, type, anonymous: false });
     }
   };
+
+  // Keep the ref pointing at the freshest version of toggleMedia on every render
+  toggleMediaRef.current = toggleMedia;
 
   const toggleHandRaise = () => {
     const nextValue = !isHandRaised;

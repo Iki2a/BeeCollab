@@ -31,8 +31,9 @@ export class WsJwtGuard implements CanActivate {
       const payload = this.jwtService.verify<WsUser>(token, {
         secret: this.config.get<string>('JWT_SECRET'),
       });
-      // Attach typed payload to socket data
-      client.data = { user: payload };
+      // Merge into existing socket.data so profile/meetingId set by onMeetingJoin
+      // are not wiped when subsequent events trigger this guard again.
+      client.data = { ...client.data, user: payload };
       return true;
     } catch {
       throw new UnauthorizedException('WS: Invalid token');

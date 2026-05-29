@@ -10,6 +10,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SignalingService } from './signaling.service';
 import { ChatService } from '../chat/chat.service';
 import { AgendaService } from '../meetings/agenda.service';
@@ -17,6 +18,7 @@ import { PollService } from '../meetings/poll.service';
 import { ReactionService } from '../meetings/reaction.service';
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { SocketData, WsUser } from './signaling.types';
+import { ParticipantMediaChangedEvent } from '../events/meeting.events';
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -99,6 +101,7 @@ export class SignalingGateway
     private readonly agendaService: AgendaService,
     private readonly pollService: PollService,
     private readonly reactionService: ReactionService,
+    private readonly eventEmitter: EventEmitter2,
   ) { }
 
   emitMeetingEnded(meetingId: string, reason?: string) {
@@ -274,26 +277,46 @@ export class SignalingGateway
     @MessageBody() payload: MediaTogglePayload,
   ) {
     const user = getUser(client);
-    const updated = await this.signalingService.toggleMedia(
-      payload.meetingId,
-      user.sub,
-      payload.type,
-      payload.enabled,
-    );
+    const data = client.data as SocketData;
 
+    // Update socket.data immediately (used by meeting:state snapshots)
     if (payload.type === 'audio') {
       client.data.audioEnabled = payload.enabled;
     } else {
       client.data.videoEnabled = payload.enabled;
     }
 
+    // Guests have no DB participant row — skip DB write, use socket.data as source of truth
+    let userProfile = data.profile ?? { id: user.sub, name: user.name ?? 'Guest', avatarUrl: null };
+
+    if (!user.isGuest) {
+      const updated = await this.signalingService.toggleMedia(
+        payload.meetingId,
+        user.sub,
+        payload.type,
+        payload.enabled,
+      );
+      userProfile = updated.user;
+    }
+
     this.server.to(payload.meetingId).emit('media:updated', {
       socketId: client.id,
       userId: user.sub,
-      user: updated.user,
+      user: userProfile,
       type: payload.type,
       enabled: payload.enabled,
     });
+
+    // Publish domain event (Observer Pattern)
+    this.eventEmitter.emit(
+      'participant.media_changed',
+      new ParticipantMediaChangedEvent(
+        payload.meetingId,
+        user.sub,
+        payload.type,
+        payload.enabled,
+      ),
+    );
   }
 
   @SubscribeMessage('media:speaking')

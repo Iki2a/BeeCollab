@@ -35,3 +35,12 @@ export class ParticipantLeftEvent {
     public readonly socketId: string,
   ) {}
 }
+
+export class ParticipantMediaChangedEvent {
+  constructor(
+    public readonly meetingId: string,
+    public readonly userId: string,
+    public readonly type: 'audio' | 'video',
+    public readonly enabled: boolean,
+  ) {}
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const getApiBase = () => {
   const env = process.env.NEXT_PUBLIC_API_URL;
@@ -15,6 +15,8 @@ const unwrap = <T = any>(json: any): T => json?.data ?? json;
 
 export default function AuthPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/';
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -56,7 +58,7 @@ export default function AuthPage() {
         const data = unwrap(json);
         if (data.access_token) {
           localStorage.setItem('token', data.access_token);
-          router.push('/');
+          router.push(redirectTo);
         } else if (mode === 'register') {
           setMode('login');
           setError('Registration successful! Please login.');
@@ -263,7 +265,7 @@ export default function AuthPage() {
                   const data = unwrap(json);
                   localStorage.setItem('token', data.access_token);
                   localStorage.setItem('guestName', guestName.trim());
-                  router.push('/');
+                  router.push(redirectTo);
                 } else {
                   setGuestError(json.error || 'Failed to continue as guest');
                 }

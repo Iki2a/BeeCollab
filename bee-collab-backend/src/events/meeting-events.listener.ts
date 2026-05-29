@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { MeetingEndedEvent, ParticipantJoinedEvent, ParticipantLeftEvent } from './meeting.events';
+import { MeetingEndedEvent, ParticipantJoinedEvent, ParticipantLeftEvent, ParticipantMediaChangedEvent } from './meeting.events';
 import type { IMeetingRepository } from '../repositories/interfaces/meeting.repository.interface';
 import type { IParticipantRepository } from '../repositories/interfaces/participant.repository.interface';
 import type { IChatRepository } from '../repositories/interfaces/chat.repository.interface';
@@ -58,6 +58,27 @@ export class MeetingEventsListener {
   handleParticipantJoined(event: ParticipantJoinedEvent): void {
     this.logger.log(
       `[AUDIT] Participant joined — userId: ${event.userId}, meetingId: ${event.meetingId}`,
+    );
+  }
+
+  // ─── participant.media_changed ────────────────────────────────────────────────
+
+  /**
+   * Observer: listens to participant.media_changed
+   *
+   * Fires whenever any participant (including guests) toggles their
+   * audio or video.  Demonstrates Observer Pattern — the gateway emits
+   * the event without knowing who is listening; new reactions can be
+   * added here without touching the gateway.
+   *
+   * Current reaction: audit log.  Future reactions (analytics, recording
+   * triggers, accessibility alerts) can be added here with zero gateway changes.
+   */
+  @OnEvent('participant.media_changed')
+  handleParticipantMediaChanged(event: ParticipantMediaChangedEvent): void {
+    this.logger.log(
+      `[AUDIT] Media changed — userId: ${event.userId}, ` +
+      `${event.type}: ${event.enabled ? 'ON' : 'OFF'}, meetingId: ${event.meetingId}`,
     );
   }
 
