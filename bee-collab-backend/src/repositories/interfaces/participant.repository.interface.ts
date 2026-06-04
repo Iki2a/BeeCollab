@@ -8,7 +8,10 @@ export interface ParticipantEntity {
   role: ParticipantRole;
   audioEnabled: boolean;
   videoEnabled: boolean;
+<<<<<<< HEAD
   handRaisedAt: Date | null;
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   leftAt: Date | null;
 }
 
@@ -23,7 +26,10 @@ export interface CreateParticipantData {
   role: ParticipantRole;
   audioEnabled: boolean;
   videoEnabled: boolean;
+<<<<<<< HEAD
   handRaisedAt?: Date | null;
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 }
 
 export interface UpdateParticipantData {
@@ -32,7 +38,10 @@ export interface UpdateParticipantData {
   audioEnabled?: boolean;
   videoEnabled?: boolean;
   role?: ParticipantRole;
+<<<<<<< HEAD
   handRaisedAt?: Date | null;
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 }
 
 export interface IParticipantRepository {

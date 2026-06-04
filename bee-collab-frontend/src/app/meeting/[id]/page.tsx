@@ -7,7 +7,11 @@ import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Hand, Users, MessageSquare,
+<<<<<<< HEAD
   Send, X, Subtitles, MonitorUp, MoreVertical, Info, ListChecks, BarChart3, Smile
+=======
+  Send, X, Subtitles, MonitorUp, MoreVertical, Info
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 } from 'lucide-react';
 
 const getApiBase = () => {
@@ -40,7 +44,11 @@ export default function Meeting() {
   const [isConnected, setIsConnected] = useState(false);
   const [isJoining, setIsJoining] = useState(true);
   const [mediaEnabled, setMediaEnabled] = useState({ audio: false, video: false });
+<<<<<<< HEAD
   const [activeTab, setActiveTab] = useState<'chat' | 'people' | 'agenda' | 'polls' | null>(null);
+=======
+  const [activeTab, setActiveTab] = useState<'chat' | 'people' | null>(null);
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   const [isHost, setIsHost] = useState(false);
   const [isCoHost, setIsCoHost] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -60,6 +68,7 @@ export default function Meeting() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isHandRaised, setIsHandRaised] = useState(false);
+<<<<<<< HEAD
   const [speakingQueue, setSpeakingQueue] = useState<any[]>([]);
   const [agendas, setAgendas] = useState<any[]>([]);
   const [activeAgenda, setActiveAgenda] = useState<any>(null);
@@ -69,6 +78,10 @@ export default function Meeting() {
   const [newPollQuestion, setNewPollQuestion] = useState('');
   const [newPollOptions, setNewPollOptions] = useState(['', '']);
   const [newAgendaItems, setNewAgendaItems] = useState([{ title: '', duration: 60 }]);
+=======
+  const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({});
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   const [speakingParticipants, setSpeakingParticipants] = useState<Record<string, boolean>>({});
   const [showAutoplayOverlay, setShowAutoplayOverlay] = useState(false);
   const [isDeviceSettingsOpen, setIsDeviceSettingsOpen] = useState(false);
@@ -1012,6 +1025,7 @@ export default function Meeting() {
       }
     });
 
+<<<<<<< HEAD
     newSocket.on('queue:updated', (payload) => {
       setSpeakingQueue(payload);
     });
@@ -1044,6 +1058,14 @@ export default function Meeting() {
 
     newSocket.on('reaction:aggregated', (payload) => {
       setReactions(payload);
+=======
+    newSocket.on('hand:updated', (payload) => {
+      if (!payload?.userId) return;
+      setRaisedHands((prev) => ({
+        ...prev,
+        [payload.userId]: payload.raised,
+      }));
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
     });
 
     newSocket.on('media:updated', (payload) => {
@@ -1320,16 +1342,29 @@ export default function Meeting() {
     }
   };
 
+<<<<<<< HEAD
   const sendReaction = (type: string) => {
     if (socket) {
       socket.emit('reaction:send', { meetingId, type, anonymous: false });
     }
   };
 
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   const toggleHandRaise = () => {
     const nextValue = !isHandRaised;
     setIsHandRaised(nextValue);
 
+<<<<<<< HEAD
+=======
+    if (currentUserId) {
+      setRaisedHands((prev) => ({
+        ...prev,
+        [currentUserId]: nextValue,
+      }));
+    }
+
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
     if (socket) {
       socket.emit('hand:toggle', { meetingId, raised: nextValue });
     }
@@ -1928,8 +1963,12 @@ export default function Meeting() {
                 {nonScreenItems.map((p: any) => {
                   const originalId = p.originalId || p.id;
                   const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
+<<<<<<< HEAD
                   const queueIndex = speakingQueue.findIndex(q => q.userId === participantUserId);
                   const showHand = queueIndex !== -1;
+=======
+                  const showHand = participantUserId ? raisedHands[participantUserId] : false;
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
                   const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
                   const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
                   const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
@@ -1983,8 +2022,12 @@ export default function Meeting() {
               {displayItems.map((p: any) => {
                 const originalId = p.originalId || p.id;
                 const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
+<<<<<<< HEAD
                 const queueIndex = speakingQueue.findIndex(q => q.userId === participantUserId);
                 const showHand = queueIndex !== -1;
+=======
+                const showHand = participantUserId ? raisedHands[participantUserId] : false;
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
                 const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
                 const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
                 const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
@@ -2044,10 +2087,14 @@ export default function Meeting() {
           <div className={`sidebar-container sidebar-${activeTab}`} style={{ width: '360px', background: 'linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%)', color: '#2b2f38', display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(0,0,0,0.06)', flexShrink: 0, zIndex: 10, boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)', borderTopLeftRadius: '24px', borderBottomLeftRadius: '24px', overflow: 'hidden' }}>
             <div style={{ display: 'flex', padding: '1.1rem 1.25rem', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
               <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1f3b64' }}>
+<<<<<<< HEAD
                 {activeTab === 'people' ? `Participants (${participants.length})` :
                  activeTab === 'chat' ? 'Chat' :
                  activeTab === 'agenda' ? 'Meeting Agenda' :
                  activeTab === 'polls' ? 'Polls' : ''}
+=======
+                {activeTab === 'people' ? `Participants (${participants.length})` : 'Chat'}
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
               </span>
               <button onClick={() => setActiveTab(null)} style={{ background: '#eef2f7', border: 'none', cursor: 'pointer', color: '#6b7280', width: '36px', height: '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={24} />
@@ -2127,6 +2174,7 @@ export default function Meeting() {
             )}
 
             {/* Other Tabs */}
+<<<<<<< HEAD
             {/* Agenda Tab */}
             {activeTab === 'agenda' && (
               <div style={{ padding: '1.25rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -2303,6 +2351,8 @@ export default function Meeting() {
               </div>
             )}
 
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
             {activeTab === 'people' && (
               <div style={{ padding: '1rem 1.25rem 1.5rem', flex: 1, overflowY: 'auto' }}>
                 <div style={{ marginBottom: '1rem' }}>
@@ -2322,6 +2372,7 @@ export default function Meeting() {
                     if (isAHost) return -1;
                     if (isBHost) return 1;
 
+<<<<<<< HEAD
                     const queueIndexA = speakingQueue.findIndex(q => q.userId === a.userId);
                     const queueIndexB = speakingQueue.findIndex(q => q.userId === b.userId);
                     const isARaised = queueIndexA !== -1;
@@ -2330,6 +2381,12 @@ export default function Meeting() {
                     if (isARaised && !isBRaised) return -1;
                     if (!isARaised && isBRaised) return 1;
                     if (isARaised && isBRaised) return queueIndexA - queueIndexB;
+=======
+                    const isARaised = raisedHands[a.userId];
+                    const isBRaised = raisedHands[b.userId];
+                    if (isARaised && !isBRaised) return -1;
+                    if (!isARaised && isBRaised) return 1;
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 
                     return 0;
                   })
@@ -2345,8 +2402,12 @@ export default function Meeting() {
                     const isMe = currentUserId && p.userId === currentUserId;
                     const isHostLabel = meetingInfo?.hostId && p.userId === meetingInfo.hostId;
                     const isCoHostLabel = p.role === 'CO_HOST';
+<<<<<<< HEAD
                     const queueIndex = speakingQueue.findIndex(q => q.userId === p.userId);
                     const isRaised = queueIndex !== -1;
+=======
+                    const isRaised = raisedHands[p.userId];
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
                     const audioEnabled = isMe ? mediaEnabled.audio : p.audioEnabled;
                     const videoEnabled = isMe ? mediaEnabled.video : p.videoEnabled;
                     const myParticipant =
@@ -2364,7 +2425,11 @@ export default function Meeting() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#374151' }}>
+<<<<<<< HEAD
                             {isMe ? 'You' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && <span style={{ background: '#3b82f6', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', marginLeft: '0.25rem' }}>#{queueIndex + 1}</span>}
+=======
+                            {isMe ? 'You' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && '✋'}
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
                           </span>
                         </div>
                         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
@@ -2458,6 +2523,7 @@ export default function Meeting() {
           <button onClick={toggleHandRaise} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isHandRaised ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             {isHandRaised ? <Hand size={20} /> : <Hand size={20} />}
           </button>
+<<<<<<< HEAD
           
           <div style={{ position: 'relative' }}>
             <button onClick={() => sendReaction('❤️')} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
@@ -2475,12 +2541,15 @@ export default function Meeting() {
             )}
           </div>
 
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
           <button onClick={toggleScreenShare} className="control-btn screen-share-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isScreenSharing ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             <MonitorUp size={20} />
           </button>
 
           {/* Mobile-only inline buttons (chat + people). Hidden on desktop via inline style; shown via mobile CSS. */}
           <button
+<<<<<<< HEAD
             onClick={() => setActiveTab(activeTab === 'agenda' ? null : 'agenda')}
             className="control-btn mobile-action-btn"
             aria-label="Agenda"
@@ -2497,6 +2566,8 @@ export default function Meeting() {
             <BarChart3 size={20} />
           </button>
           <button
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
             onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')}
             className="control-btn mobile-action-btn"
             aria-label="Chat"
@@ -2563,8 +2634,11 @@ export default function Meeting() {
 
         <div className="bottom-bar-actions" style={{ width: '250px', display: 'flex', justifyContent: 'flex-end', gap: '1rem', color: '#e4e6ea', position: 'relative' }}>
           <button onClick={() => setIsInfoOpen(true)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><Info size={20} /></button>
+<<<<<<< HEAD
           <button onClick={() => setActiveTab(activeTab === 'agenda' ? null : 'agenda')} style={{ background: 'none', border: 'none', color: activeTab === 'agenda' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}><ListChecks size={20} /></button>
           <button onClick={() => setActiveTab(activeTab === 'polls' ? null : 'polls')} style={{ background: 'none', border: 'none', color: activeTab === 'polls' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}><BarChart3 size={20} /></button>
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
           <button onClick={() => setActiveTab(activeTab === 'people' ? null : 'people')} style={{ position: 'relative', background: 'none', border: 'none', color: activeTab === 'people' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}>
             <Users size={20} />
             <span style={{ position: 'absolute', top: '-6px', right: '-8px', background: '#8ab4f8', color: '#202124', fontSize: '0.6rem', fontWeight: 'bold', width: '14px', height: '14px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -27,6 +27,7 @@ enum MessageType {
 }
 
 model User {
+<<<<<<< HEAD
   id            String         @id @default(uuid())
   email         String         @unique
   name          String
@@ -38,6 +39,18 @@ model User {
   participants  Participant[]
   messages      ChatMessage[]
   pollResponses PollResponse[]
+=======
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  meetings     Meeting[]     @relation("HostRelation")
+  participants Participant[]
+  messages     ChatMessage[]
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 }
 
 model Meeting {
@@ -54,6 +67,7 @@ model Meeting {
   createdAt       DateTime      @default(now())
   participants    Participant[]
   messages        ChatMessage[]
+<<<<<<< HEAD
   agendas         Agenda[]
   polls           Poll[]
   reactions       Reaction[]
@@ -110,6 +124,8 @@ model Reaction {
   type      String   // emoji string or reaction type
   userId    String?  // Optional, can be anonymous
   createdAt DateTime @default(now())
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 }
 
 model Participant {
@@ -122,7 +138,10 @@ model Participant {
   role         ParticipantRole @default(PARTICIPANT)
   audioEnabled Boolean         @default(true)
   videoEnabled Boolean         @default(true)
+<<<<<<< HEAD
   handRaisedAt DateTime? // For Speaking Queue
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   joinedAt     DateTime        @default(now())
   leftAt       DateTime?
 

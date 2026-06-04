@@ -143,6 +143,7 @@ export class SignalingService {
     return participant;
   }
 
+<<<<<<< HEAD
   async toggleHand(meetingId: string, userId: string, raised: boolean) {
     return this.participantRepository.updateByMeetingAndUser(meetingId, userId, {
       handRaisedAt: raised ? new Date() : null,
@@ -166,6 +167,8 @@ export class SignalingService {
     }
   }
 
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   async getParticipantBySocketId(meetingId: string, targetSocketId: string) {
     return this.participantRepository.findFirstByMeeting(meetingId, {
       socketId: targetSocketId,

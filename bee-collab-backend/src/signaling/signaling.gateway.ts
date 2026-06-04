@@ -12,9 +12,12 @@ import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
 import { SignalingService } from './signaling.service';
 import { ChatService } from '../chat/chat.service';
+<<<<<<< HEAD
 import { AgendaService } from '../meetings/agenda.service';
 import { PollService } from '../meetings/poll.service';
 import { ReactionService } from '../meetings/reaction.service';
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { SocketData, WsUser } from './signaling.types';
 
@@ -96,9 +99,12 @@ export class SignalingGateway
   constructor(
     private readonly signalingService: SignalingService,
     private readonly chatService: ChatService,
+<<<<<<< HEAD
     private readonly agendaService: AgendaService,
     private readonly pollService: PollService,
     private readonly reactionService: ReactionService,
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   ) { }
 
   emitMeetingEnded(meetingId: string, reason?: string) {
@@ -202,6 +208,7 @@ export class SignalingGateway
     // Fetch and send chat history to the new participant
     const history = await this.chatService.getMessages(payload.meetingId);
     client.emit('chat:history', history);
+<<<<<<< HEAD
 
     // Fetch and send agendas and polls
     const [agendas, polls] = await Promise.all([
@@ -210,6 +217,8 @@ export class SignalingGateway
     ]);
     client.emit('agenda:list', agendas);
     client.emit('poll:list', polls);
+=======
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   }
 
   // ── WebRTC relay ─────────────────────────────────────────────────────────────
@@ -319,11 +328,16 @@ export class SignalingGateway
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('hand:toggle')
+<<<<<<< HEAD
   async onHandToggle(
+=======
+  onHandToggle(
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: HandTogglePayload,
   ) {
     const user = getUser(client);
+<<<<<<< HEAD
     await this.signalingService.toggleHand(payload.meetingId, user.sub, payload.raised);
 
     const queue = await this.signalingService.getSpeakingQueue(payload.meetingId);
@@ -429,6 +443,13 @@ export class SignalingGateway
 
     const aggregated = await this.reactionService.getAggregatedReactions(payload.meetingId);
     this.server.to(payload.meetingId).emit('reaction:aggregated', aggregated);
+=======
+
+    this.server.to(payload.meetingId).emit('hand:updated', {
+      userId: user.sub,
+      raised: payload.raised,
+    });
+>>>>>>> d04c33778cc98a2c431fcf6907730064dd5707e4
   }
 
   // ── Kick participant (HOST only) ──────────────────────────────────────────────
