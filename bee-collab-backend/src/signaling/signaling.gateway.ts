@@ -12,6 +12,9 @@ import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
 import { SignalingService } from './signaling.service';
 import { ChatService } from '../chat/chat.service';
+import { AgendaService } from '../meetings/agenda.service';
+import { PollService } from '../meetings/poll.service';
+import { ReactionService } from '../meetings/reaction.service';
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { SocketData, WsUser } from './signaling.types';
 
@@ -93,6 +96,9 @@ export class SignalingGateway
   constructor(
     private readonly signalingService: SignalingService,
     private readonly chatService: ChatService,
+    private readonly agendaService: AgendaService,
+    private readonly pollService: PollService,
+    private readonly reactionService: ReactionService,
   ) { }
 
   emitMeetingEnded(meetingId: string, reason?: string) {
@@ -196,6 +202,14 @@ export class SignalingGateway
     // Fetch and send chat history to the new participant
     const history = await this.chatService.getMessages(payload.meetingId);
     client.emit('chat:history', history);
+
+    // Fetch and send agendas and polls
+    const [agendas, polls] = await Promise.all([
+      this.agendaService.getAgendas(payload.meetingId),
+      this.pollService.getPolls(payload.meetingId),
+    ]);
+    client.emit('agenda:list', agendas);
+    client.emit('poll:list', polls);
   }
 
   // ── WebRTC relay ─────────────────────────────────────────────────────────────
@@ -305,16 +319,116 @@ export class SignalingGateway
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('hand:toggle')
-  onHandToggle(
+  async onHandToggle(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: HandTogglePayload,
   ) {
     const user = getUser(client);
+    await this.signalingService.toggleHand(payload.meetingId, user.sub, payload.raised);
 
-    this.server.to(payload.meetingId).emit('hand:updated', {
-      userId: user.sub,
-      raised: payload.raised,
-    });
+    const queue = await this.signalingService.getSpeakingQueue(payload.meetingId);
+    this.server.to(payload.meetingId).emit('queue:updated', queue.map(p => ({
+      userId: p.userId,
+      user: p.user,
+      handRaisedAt: p.handRaisedAt,
+    })));
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('queue:reorder')
+  async onQueueReorder(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; orderedUserIds: string[] },
+  ) {
+    const user = getUser(client);
+    const canReorder = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canReorder) return;
+
+    await this.signalingService.reorderQueue(payload.meetingId, payload.orderedUserIds);
+    const queue = await this.signalingService.getSpeakingQueue(payload.meetingId);
+    this.server.to(payload.meetingId).emit('queue:updated', queue.map(p => ({
+      userId: p.userId,
+      user: p.user,
+      handRaisedAt: p.handRaisedAt,
+    })));
+  }
+
+  // ── Agenda ───────────────────────────────────────────────────────────────────
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('agenda:create')
+  async onAgendaCreate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; items: { title: string; duration: number }[] },
+  ) {
+    const user = getUser(client);
+    const canManage = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canManage) return;
+
+    const agendas = await this.agendaService.createAgendas(payload.meetingId, payload.items);
+    this.server.to(payload.meetingId).emit('agenda:list', agendas);
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('agenda:start')
+  async onAgendaStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; agendaId: string },
+  ) {
+    const user = getUser(client);
+    const canManage = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canManage) return;
+
+    const activeItem = await this.agendaService.startAgendaItem(payload.meetingId, payload.agendaId);
+    this.server.to(payload.meetingId).emit('agenda:active', activeItem);
+  }
+
+  // ── Polling ──────────────────────────────────────────────────────────────────
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('poll:create')
+  async onPollCreate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; question: string; options: string[] },
+  ) {
+    const user = getUser(client);
+    const canCreate = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
+    if (!canCreate) return;
+
+    const poll = await this.pollService.createPoll(payload.meetingId, payload.question, payload.options);
+    this.server.to(payload.meetingId).emit('poll:created', poll);
+  }
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('poll:vote')
+  async onPollVote(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; pollId: string; optionId: string },
+  ) {
+    const user = getUser(client);
+    await this.pollService.vote(user.sub, payload.pollId, payload.optionId);
+
+    const updatedPolls = await this.pollService.getPolls(payload.meetingId);
+    this.server.to(payload.meetingId).emit('poll:updated', updatedPolls);
+  }
+
+  // ── Reactions ────────────────────────────────────────────────────────────────
+
+  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('reaction:send')
+  async onReactionSend(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { meetingId: string; type: string; anonymous: boolean },
+  ) {
+    const user = getUser(client);
+    await this.reactionService.sendReaction(
+      payload.meetingId,
+      payload.type,
+      payload.anonymous ? undefined : user.sub,
+    );
+
+    const aggregated = await this.reactionService.getAggregatedReactions(payload.meetingId);
+    this.server.to(payload.meetingId).emit('reaction:aggregated', aggregated);
   }
 
   // ── Kick participant (HOST only) ──────────────────────────────────────────────

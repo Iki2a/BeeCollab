@@ -7,7 +7,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Hand, Users, MessageSquare,
-  Send, X, Subtitles, MonitorUp, MoreVertical, Info
+  Send, X, Subtitles, MonitorUp, MoreVertical, Info, ListChecks, BarChart3, Smile
 } from 'lucide-react';
 
 const getApiBase = () => {
@@ -40,7 +40,7 @@ export default function Meeting() {
   const [isConnected, setIsConnected] = useState(false);
   const [isJoining, setIsJoining] = useState(true);
   const [mediaEnabled, setMediaEnabled] = useState({ audio: false, video: false });
-  const [activeTab, setActiveTab] = useState<'chat' | 'people' | null>(null);
+  const [activeTab, setActiveTab] = useState<'chat' | 'people' | 'agenda' | 'polls' | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [isCoHost, setIsCoHost] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -60,8 +60,15 @@ export default function Meeting() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isHandRaised, setIsHandRaised] = useState(false);
-  const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({});
+  const [speakingQueue, setSpeakingQueue] = useState<any[]>([]);
+  const [agendas, setAgendas] = useState<any[]>([]);
+  const [activeAgenda, setActiveAgenda] = useState<any>(null);
+  const [polls, setPolls] = useState<any[]>([]);
+  const [reactions, setReactions] = useState<any[]>([]);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [newPollQuestion, setNewPollQuestion] = useState('');
+  const [newPollOptions, setNewPollOptions] = useState(['', '']);
+  const [newAgendaItems, setNewAgendaItems] = useState([{ title: '', duration: 60 }]);
   const [speakingParticipants, setSpeakingParticipants] = useState<Record<string, boolean>>({});
   const [showAutoplayOverlay, setShowAutoplayOverlay] = useState(false);
   const [isDeviceSettingsOpen, setIsDeviceSettingsOpen] = useState(false);
@@ -1005,12 +1012,38 @@ export default function Meeting() {
       }
     });
 
-    newSocket.on('hand:updated', (payload) => {
-      if (!payload?.userId) return;
-      setRaisedHands((prev) => ({
-        ...prev,
-        [payload.userId]: payload.raised,
-      }));
+    newSocket.on('queue:updated', (payload) => {
+      setSpeakingQueue(payload);
+    });
+
+    newSocket.on('agenda:list', (payload) => {
+      setAgendas(payload);
+      const active = payload.find((a: any) => a.isActive);
+      if (active) setActiveAgenda(active);
+    });
+
+    newSocket.on('agenda:active', (payload) => {
+      setActiveAgenda(payload);
+      setAgendas((prev) => prev.map(a => ({
+        ...a,
+        isActive: a.id === payload.id
+      })));
+    });
+
+    newSocket.on('poll:list', (payload) => {
+      setPolls(payload);
+    });
+
+    newSocket.on('poll:created', (payload) => {
+      setPolls((prev) => [payload, ...prev]);
+    });
+
+    newSocket.on('poll:updated', (payload) => {
+      setPolls(payload);
+    });
+
+    newSocket.on('reaction:aggregated', (payload) => {
+      setReactions(payload);
     });
 
     newSocket.on('media:updated', (payload) => {
@@ -1287,16 +1320,15 @@ export default function Meeting() {
     }
   };
 
+  const sendReaction = (type: string) => {
+    if (socket) {
+      socket.emit('reaction:send', { meetingId, type, anonymous: false });
+    }
+  };
+
   const toggleHandRaise = () => {
     const nextValue = !isHandRaised;
     setIsHandRaised(nextValue);
-
-    if (currentUserId) {
-      setRaisedHands((prev) => ({
-        ...prev,
-        [currentUserId]: nextValue,
-      }));
-    }
 
     if (socket) {
       socket.emit('hand:toggle', { meetingId, raised: nextValue });
@@ -1896,7 +1928,8 @@ export default function Meeting() {
                 {nonScreenItems.map((p: any) => {
                   const originalId = p.originalId || p.id;
                   const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
-                  const showHand = participantUserId ? raisedHands[participantUserId] : false;
+                  const queueIndex = speakingQueue.findIndex(q => q.userId === participantUserId);
+                  const showHand = queueIndex !== -1;
                   const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
                   const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
                   const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
@@ -1950,7 +1983,8 @@ export default function Meeting() {
               {displayItems.map((p: any) => {
                 const originalId = p.originalId || p.id;
                 const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
-                const showHand = participantUserId ? raisedHands[participantUserId] : false;
+                const queueIndex = speakingQueue.findIndex(q => q.userId === participantUserId);
+                const showHand = queueIndex !== -1;
                 const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
                 const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
                 const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
@@ -2010,7 +2044,10 @@ export default function Meeting() {
           <div className={`sidebar-container sidebar-${activeTab}`} style={{ width: '360px', background: 'linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%)', color: '#2b2f38', display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(0,0,0,0.06)', flexShrink: 0, zIndex: 10, boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)', borderTopLeftRadius: '24px', borderBottomLeftRadius: '24px', overflow: 'hidden' }}>
             <div style={{ display: 'flex', padding: '1.1rem 1.25rem', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
               <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1f3b64' }}>
-                {activeTab === 'people' ? `Participants (${participants.length})` : 'Chat'}
+                {activeTab === 'people' ? `Participants (${participants.length})` :
+                 activeTab === 'chat' ? 'Chat' :
+                 activeTab === 'agenda' ? 'Meeting Agenda' :
+                 activeTab === 'polls' ? 'Polls' : ''}
               </span>
               <button onClick={() => setActiveTab(null)} style={{ background: '#eef2f7', border: 'none', cursor: 'pointer', color: '#6b7280', width: '36px', height: '36px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={24} />
@@ -2090,6 +2127,182 @@ export default function Meeting() {
             )}
 
             {/* Other Tabs */}
+            {/* Agenda Tab */}
+            {activeTab === 'agenda' && (
+              <div style={{ padding: '1.25rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {(isHost || isCoHost) && agendas.length === 0 && (
+                  <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 600 }}>Create Agenda</h3>
+                    {newAgendaItems.map((item, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        <input
+                          type="text"
+                          placeholder="Title"
+                          value={item.title}
+                          onChange={(e) => {
+                            const updated = [...newAgendaItems];
+                            updated[i].title = e.target.value;
+                            setNewAgendaItems(updated);
+                          }}
+                          style={{ flex: 2, padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.85rem' }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Sec"
+                          value={item.duration}
+                          onChange={(e) => {
+                            const updated = [...newAgendaItems];
+                            updated[i].duration = parseInt(e.target.value) || 0;
+                            setNewAgendaItems(updated);
+                          }}
+                          style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setNewAgendaItems([...newAgendaItems, { title: '', duration: 60 }])}
+                      style={{ width: '100%', padding: '0.5rem', border: '1px dashed #3b82f6', color: '#3b82f6', background: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '1rem' }}
+                    >
+                      + Add Item
+                    </button>
+                    <button
+                      onClick={() => {
+                        const items = newAgendaItems.filter(it => it.title.trim());
+                        if (items.length === 0) return;
+                        socket?.emit('agenda:create', { meetingId, items });
+                        setNewAgendaItems([{ title: '', duration: 60 }]);
+                      }}
+                      style={{ width: '100%', padding: '0.75rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Save Agenda
+                    </button>
+                  </div>
+                )}
+
+                {activeAgenda && (
+                  <div style={{ background: 'white', padding: '1rem', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current Item</h3>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1f3b64', marginBottom: '1rem' }}>{activeAgenda.title}</div>
+                    <div style={{ height: '8px', background: '#eef2f7', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: '#3b82f6', width: '45%', transition: 'width 1s linear' }}></div>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Schedule</h3>
+                  {agendas.length === 0 ? (
+                    <p style={{ color: '#8f95a3', fontSize: '0.875rem' }}>No agenda items set for this meeting.</p>
+                  ) : (
+                    agendas.map((item, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem', background: item.isActive ? '#eff6ff' : 'white', borderRadius: '12px', border: item.isActive ? '1px solid #bfdbfe' : '1px solid rgba(0,0,0,0.05)' }}>
+                        <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: item.isActive ? '#3b82f6' : '#f3f4f6', color: item.isActive ? 'white' : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>{i + 1}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>{item.title}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{Math.floor(item.duration / 60)} min</div>
+                        </div>
+                        {(isHost || isCoHost) && !item.isActive && (
+                          <button
+                            onClick={() => socket?.emit('agenda:start', { meetingId, agendaId: item.id })}
+                            style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '8px', fontSize: '0.75rem', cursor: 'pointer' }}
+                          >
+                            Start
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Polls Tab */}
+            {activeTab === 'polls' && (
+              <div style={{ padding: '1.25rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {(isHost || isCoHost) && (
+                  <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 600 }}>Create Poll</h3>
+                    <input
+                      type="text"
+                      placeholder="Question"
+                      value={newPollQuestion}
+                      onChange={(e) => setNewPollQuestion(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '0.75rem', fontSize: '0.9rem' }}
+                    />
+                    {newPollOptions.map((opt, i) => (
+                      <input
+                        key={i}
+                        type="text"
+                        placeholder={`Option ${i + 1}`}
+                        value={opt}
+                        onChange={(e) => {
+                          const updated = [...newPollOptions];
+                          updated[i] = e.target.value;
+                          setNewPollOptions(updated);
+                        }}
+                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '0.5rem', fontSize: '0.85rem' }}
+                      />
+                    ))}
+                    <button
+                      onClick={() => setNewPollOptions([...newPollOptions, ''])}
+                      style={{ width: '100%', padding: '0.5rem', border: '1px dashed #3b82f6', color: '#3b82f6', background: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '1rem' }}
+                    >
+                      + Add Option
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!newPollQuestion.trim()) return;
+                        socket?.emit('poll:create', { meetingId, question: newPollQuestion, options: newPollOptions.filter(o => o.trim()) });
+                        setNewPollQuestion('');
+                        setNewPollOptions(['', '']);
+                      }}
+                      style={{ width: '100%', padding: '0.75rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Launch Poll
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Recent Polls</h3>
+                  {polls.length === 0 ? (
+                    <p style={{ color: '#8f95a3', fontSize: '0.875rem' }}>No polls yet.</p>
+                  ) : (
+                    polls.map((poll) => {
+                      const totalVotes = poll.options.reduce((sum: number, opt: any) => sum + (opt.responses?.length || 0), 0);
+                      return (
+                        <div key={poll.id} style={{ background: 'white', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem' }}>{poll.question}</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {poll.options.map((opt: any) => {
+                              const voteCount = opt.responses?.length || 0;
+                              const percentage = totalVotes === 0 ? 0 : Math.round((voteCount / totalVotes) * 100);
+                              return (
+                                <button
+                                  key={opt.id}
+                                  onClick={() => socket?.emit('poll:vote', { meetingId, pollId: poll.id, optionId: opt.id })}
+                                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', position: 'relative' }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                                    <span>{opt.text}</span>
+                                    <span>{percentage}%</span>
+                                  </div>
+                                  <div style={{ height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', background: '#3b82f6', width: `${percentage}%`, transition: 'width 0.3s ease' }}></div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>{totalVotes} total votes</div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'people' && (
               <div style={{ padding: '1rem 1.25rem 1.5rem', flex: 1, overflowY: 'auto' }}>
                 <div style={{ marginBottom: '1rem' }}>
@@ -2109,10 +2322,14 @@ export default function Meeting() {
                     if (isAHost) return -1;
                     if (isBHost) return 1;
 
-                    const isARaised = raisedHands[a.userId];
-                    const isBRaised = raisedHands[b.userId];
+                    const queueIndexA = speakingQueue.findIndex(q => q.userId === a.userId);
+                    const queueIndexB = speakingQueue.findIndex(q => q.userId === b.userId);
+                    const isARaised = queueIndexA !== -1;
+                    const isBRaised = queueIndexB !== -1;
+                    
                     if (isARaised && !isBRaised) return -1;
                     if (!isARaised && isBRaised) return 1;
+                    if (isARaised && isBRaised) return queueIndexA - queueIndexB;
 
                     return 0;
                   })
@@ -2128,7 +2345,8 @@ export default function Meeting() {
                     const isMe = currentUserId && p.userId === currentUserId;
                     const isHostLabel = meetingInfo?.hostId && p.userId === meetingInfo.hostId;
                     const isCoHostLabel = p.role === 'CO_HOST';
-                    const isRaised = raisedHands[p.userId];
+                    const queueIndex = speakingQueue.findIndex(q => q.userId === p.userId);
+                    const isRaised = queueIndex !== -1;
                     const audioEnabled = isMe ? mediaEnabled.audio : p.audioEnabled;
                     const videoEnabled = isMe ? mediaEnabled.video : p.videoEnabled;
                     const myParticipant =
@@ -2146,7 +2364,7 @@ export default function Meeting() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#374151' }}>
-                            {isMe ? 'You' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && '✋'}
+                            {isMe ? 'You' : name}{isHostLabel ? ' (Host)' : ''}{isCoHostLabel ? ' (Co-Host)' : ''} {isRaised && <span style={{ background: '#3b82f6', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', marginLeft: '0.25rem' }}>#{queueIndex + 1}</span>}
                           </span>
                         </div>
                         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
@@ -2240,11 +2458,44 @@ export default function Meeting() {
           <button onClick={toggleHandRaise} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isHandRaised ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             {isHandRaised ? <Hand size={20} /> : <Hand size={20} />}
           </button>
+          
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => sendReaction('❤️')} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
+              <Smile size={20} />
+            </button>
+            {reactions.length > 0 && (
+              <div style={{ position: 'absolute', bottom: '60px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '0.5rem', background: 'rgba(0,0,0,0.7)', padding: '0.5rem', borderRadius: '20px', backdropFilter: 'blur(8px)', zIndex: 100 }}>
+                {reactions.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.9rem' }}>
+                    <span>{r.type}</span>
+                    <span style={{ fontWeight: 700 }}>{r.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button onClick={toggleScreenShare} className="control-btn screen-share-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isScreenSharing ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
             <MonitorUp size={20} />
           </button>
 
           {/* Mobile-only inline buttons (chat + people). Hidden on desktop via inline style; shown via mobile CSS. */}
+          <button
+            onClick={() => setActiveTab(activeTab === 'agenda' ? null : 'agenda')}
+            className="control-btn mobile-action-btn"
+            aria-label="Agenda"
+            style={{ display: 'none', width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', background: activeTab === 'agenda' ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}
+          >
+            <ListChecks size={20} />
+          </button>
+          <button
+            onClick={() => setActiveTab(activeTab === 'polls' ? null : 'polls')}
+            className="control-btn mobile-action-btn"
+            aria-label="Polls"
+            style={{ display: 'none', width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', background: activeTab === 'polls' ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}
+          >
+            <BarChart3 size={20} />
+          </button>
           <button
             onClick={() => setActiveTab(activeTab === 'chat' ? null : 'chat')}
             className="control-btn mobile-action-btn"
@@ -2312,6 +2563,8 @@ export default function Meeting() {
 
         <div className="bottom-bar-actions" style={{ width: '250px', display: 'flex', justifyContent: 'flex-end', gap: '1rem', color: '#e4e6ea', position: 'relative' }}>
           <button onClick={() => setIsInfoOpen(true)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><Info size={20} /></button>
+          <button onClick={() => setActiveTab(activeTab === 'agenda' ? null : 'agenda')} style={{ background: 'none', border: 'none', color: activeTab === 'agenda' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}><ListChecks size={20} /></button>
+          <button onClick={() => setActiveTab(activeTab === 'polls' ? null : 'polls')} style={{ background: 'none', border: 'none', color: activeTab === 'polls' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}><BarChart3 size={20} /></button>
           <button onClick={() => setActiveTab(activeTab === 'people' ? null : 'people')} style={{ position: 'relative', background: 'none', border: 'none', color: activeTab === 'people' ? colors.bgActiveTab : 'inherit', cursor: 'pointer' }}>
             <Users size={20} />
             <span style={{ position: 'absolute', top: '-6px', right: '-8px', background: '#8ab4f8', color: '#202124', fontSize: '0.6rem', fontWeight: 'bold', width: '14px', height: '14px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -143,6 +143,29 @@ export class SignalingService {
     return participant;
   }
 
+  async toggleHand(meetingId: string, userId: string, raised: boolean) {
+    return this.participantRepository.updateByMeetingAndUser(meetingId, userId, {
+      handRaisedAt: raised ? new Date() : null,
+    });
+  }
+
+  async getSpeakingQueue(meetingId: string) {
+    const participants = await this.participantRepository.findManyByMeeting(meetingId, true);
+    return participants
+      .filter((p) => p.handRaisedAt !== null)
+      .sort((a, b) => a.handRaisedAt!.getTime() - b.handRaisedAt!.getTime());
+  }
+
+  async reorderQueue(meetingId: string, orderedUserIds: string[]) {
+    const now = new Date();
+    for (let i = 0; i < orderedUserIds.length; i++) {
+      const userId = orderedUserIds[i];
+      await this.participantRepository.updateByMeetingAndUser(meetingId, userId, {
+        handRaisedAt: new Date(now.getTime() + i * 1000),
+      });
+    }
+  }
+
   async getParticipantBySocketId(meetingId: string, targetSocketId: string) {
     return this.participantRepository.findFirstByMeeting(meetingId, {
       socketId: targetSocketId,

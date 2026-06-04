@@ -8,6 +8,7 @@ export interface ParticipantEntity {
   role: ParticipantRole;
   audioEnabled: boolean;
   videoEnabled: boolean;
+  handRaisedAt: Date | null;
   leftAt: Date | null;
 }
 
@@ -22,6 +23,7 @@ export interface CreateParticipantData {
   role: ParticipantRole;
   audioEnabled: boolean;
   videoEnabled: boolean;
+  handRaisedAt?: Date | null;
 }
 
 export interface UpdateParticipantData {
@@ -30,6 +32,7 @@ export interface UpdateParticipantData {
   audioEnabled?: boolean;
   videoEnabled?: boolean;
   role?: ParticipantRole;
+  handRaisedAt?: Date | null;
 }
 
 export interface IParticipantRepository {
