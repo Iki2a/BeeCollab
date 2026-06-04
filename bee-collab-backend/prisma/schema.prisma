@@ -1,0 +1,141 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+enum ParticipantRole {
+  HOST
+  CO_HOST
+  PARTICIPANT
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  avatarUrl     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  meetings      Meeting[]      @relation("HostRelation")
+  participants  Participant[]
+  messages      ChatMessage[]
+  pollResponses PollResponse[]
+}
+
+model Meeting {
+  id              String        @id @default(uuid())
+  title           String
+  roomCode        String        @unique
+  hostId          String
+  host            User          @relation("HostRelation", fields: [hostId], references: [id])
+  status          MeetingStatus @default(SCHEDULED)
+  maxParticipants Int           @default(50)
+  duration        Int           @default(60) // in minutes
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime      @default(now())
+  participants    Participant[]
+  messages        ChatMessage[]
+  agendas         Agenda[]
+  polls           Poll[]
+  reactions       Reaction[]
+}
+
+model Agenda {
+  id        String    @id @default(uuid())
+  meetingId String
+  meeting   Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  title     String
+  duration  Int       // in seconds
+  order     Int
+  startTime DateTime?
+  endTime   DateTime?
+  isActive  Boolean   @default(false)
+}
+
+model Poll {
+  id        String       @id @default(uuid())
+  meetingId String
+  meeting   Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  question  String
+  isActive  Boolean      @default(true)
+  options   PollOption[]
+  responses PollResponse[]
+  createdAt DateTime     @default(now())
+}
+
+model PollOption {
+  id        String         @id @default(uuid())
+  pollId    String
+  poll      Poll           @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text      String
+  responses PollResponse[]
+}
+
+model PollResponse {
+  id        String     @id @default(uuid())
+  pollId    String
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  createdAt DateTime   @default(now())
+
+  @@unique([pollId, userId])
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  type      String   // emoji string or reaction type
+  userId    String?  // Optional, can be anonymous
+  createdAt DateTime @default(now())
+}
+
+model Participant {
+  id           String          @id @default(uuid())
+  meetingId    String
+  meeting      Meeting         @relation(fields: [meetingId], references: [id])
+  userId       String
+  user         User            @relation(fields: [userId], references: [id])
+  socketId     String? // Updated on WS connection
+  role         ParticipantRole @default(PARTICIPANT)
+  audioEnabled Boolean         @default(true)
+  videoEnabled Boolean         @default(true)
+  handRaisedAt DateTime? // For Speaking Queue
+  joinedAt     DateTime        @default(now())
+  leftAt       DateTime?
+
+  @@unique([meetingId, userId])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  meetingId String
+  meeting   Meeting     @relation(fields: [meetingId], references: [id])
+  senderId  String
+  sender    User        @relation(fields: [senderId], references: [id])
+  message   String      @db.Text
+  type      MessageType @default(TEXT)
+  createdAt DateTime    @default(now())
+}
