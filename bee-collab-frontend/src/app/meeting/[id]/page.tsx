@@ -29,6 +29,33 @@ const getWsBase = () => {
   return apiBase;
 };
 
+// Format a kbps value as kbps or Mbps
+const fmtRate = (kbps: number) =>
+  kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbps` : `${Math.round(kbps)} kbps`;
+
+type ConnStats = { rttMs: number | null; downKbps: number; upKbps: number; bars: number };
+
+// 4-bar signal-strength indicator coloured by connection quality
+function ConnectionBars({ bars }: { bars: number }) {
+  const color = bars >= 4 ? '#34a853' : bars === 3 ? '#9ccc65' : bars === 2 ? '#fbbc04' : '#ea4335';
+  const heights = [5, 8, 11, 14];
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px' }}>
+      {heights.map((h, i) => (
+        <span
+          key={i}
+          style={{
+            width: '3px',
+            height: `${h}px`,
+            borderRadius: '1px',
+            background: i < bars ? color : 'rgba(255,255,255,0.3)',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function Meeting() {
   const router = useRouter();
   const params = useParams();
@@ -44,6 +71,9 @@ export default function Meeting() {
   // Audio-only / data-saver mode: stop DOWNLOADING remote video to save bandwidth
   const [audioOnly, setAudioOnly] = useState(false);
   const audioOnlyRef = useRef(false);
+  // Live connection quality for the local user (aggregated across all peers)
+  const [connStats, setConnStats] = useState<ConnStats>({ rttMs: null, downKbps: 0, upKbps: 0, bars: 0 });
+  const statsPrevRef = useRef<{ ts: number; recv: number; sent: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'people' | 'agenda' | 'polls' | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [isCoHost, setIsCoHost] = useState(false);
@@ -527,6 +557,91 @@ export default function Meeting() {
   useEffect(() => {
     audioOnlyRef.current = audioOnly;
   }, [audioOnly]);
+
+  // Poll WebRTC stats for the local user: ping (RTT) + up/download bitrate,
+  // aggregated across every peer connection (mesh = we send/recv to each peer).
+  useEffect(() => {
+    if (!isConnected) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      const pcs = Object.values(peerStateRef.current);
+      if (pcs.length === 0) {
+        setConnStats({ rttMs: null, downKbps: 0, upKbps: 0, bars: 0 });
+        statsPrevRef.current = null;
+        return;
+      }
+
+      let totalRecv = 0;
+      let totalSent = 0;
+      const rtts: number[] = [];
+
+      for (const { pc } of pcs) {
+        try {
+          const stats = await pc.getStats();
+          let pairRecv = 0;
+          let pairSent = 0;
+          let bestPair: any = null;
+
+          stats.forEach((r: any) => {
+            // Bytes from RTP reports — these reliably track media throughput
+            if (r.type === 'inbound-rtp') totalRecv += r.bytesReceived || 0;
+            else if (r.type === 'outbound-rtp') totalSent += r.bytesSent || 0;
+            // RTT + transport-level bytes from the selected ICE candidate-pair
+            else if (r.type === 'candidate-pair' && r.state === 'succeeded') {
+              if (r.nominated || r.selected || !bestPair) bestPair = r;
+            }
+          });
+
+          if (bestPair) {
+            if (bestPair.currentRoundTripTime != null) rtts.push(bestPair.currentRoundTripTime);
+            pairRecv = bestPair.bytesReceived || 0;
+            pairSent = bestPair.bytesSent || 0;
+          }
+          // Fallback: if RTP byte counters were empty (e.g. no media yet),
+          // use the candidate-pair transport bytes so the meter still moves.
+          if (totalRecv === 0) totalRecv += pairRecv;
+          if (totalSent === 0) totalSent += pairSent;
+        } catch {
+          /* ignore a peer that failed to report */
+        }
+      }
+      if (cancelled) return;
+
+      const now = Date.now();
+      let downKbps = 0;
+      let upKbps = 0;
+      const prev = statsPrevRef.current;
+      if (prev) {
+        const dt = (now - prev.ts) / 1000;
+        if (dt > 0) {
+          downKbps = Math.max(0, ((totalRecv - prev.recv) * 8) / dt / 1000);
+          upKbps = Math.max(0, ((totalSent - prev.sent) * 8) / dt / 1000);
+        }
+      }
+      statsPrevRef.current = { ts: now, recv: totalRecv, sent: totalSent };
+
+      const rttMs = rtts.length
+        ? Math.round((rtts.reduce((a, b) => a + b, 0) / rtts.length) * 1000)
+        : null;
+
+      let bars: number;
+      if (rttMs == null) bars = 3; // connected but RTT not reported yet
+      else if (rttMs < 100) bars = 4;
+      else if (rttMs < 250) bars = 3;
+      else if (rttMs < 450) bars = 2;
+      else bars = 1;
+
+      setConnStats({ rttMs, downKbps, upKbps, bars });
+    };
+
+    void poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isConnected]);
 
   // Renegotiate a peer's video transceivers so the remote stops (or resumes)
   // sending video. This actually stops the DOWNLOAD — not just the rendering.
@@ -2172,6 +2287,21 @@ export default function Meeting() {
                     {!showVideo && (
                       <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '2px solid rgba(255,255,255,0.1)' }}>
                         {p.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Connection quality — local user only */}
+                    {p.isLocal && (
+                      <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '8px', backdropFilter: 'blur(4px)' }}>
+                          <ConnectionBars bars={connStats.bars} />
+                          <span style={{ color: 'white', fontSize: '0.7rem', fontWeight: 600 }}>
+                            {connStats.rttMs != null ? `${connStats.rttMs} ms` : '—'}
+                          </span>
+                        </div>
+                        <div style={{ color: 'white', fontSize: '0.65rem', background: 'rgba(0,0,0,0.5)', padding: '2px 8px', borderRadius: '8px', backdropFilter: 'blur(4px)', whiteSpace: 'nowrap' }}>
+                          ↓ {fmtRate(connStats.downKbps)} · ↑ {fmtRate(connStats.upKbps)}
+                        </div>
                       </div>
                     )}
 
