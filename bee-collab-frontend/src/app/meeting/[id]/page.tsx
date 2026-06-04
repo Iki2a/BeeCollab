@@ -1494,6 +1494,14 @@ export default function Meeting() {
 
   const gridInfo = getGridDimensions(displayItems.length);
 
+  // Centering for an incomplete last row.
+  // Technique: double the column count and make each tile span 2 sub-columns.
+  // The first tile of a partial last row is shifted right by the number of
+  // empty logical slots, which centers the remaining tile(s) in that row.
+  const itemsInLastRow = gridInfo.cols > 0 ? displayItems.length % gridInfo.cols : 0;
+  const lastRowFirstIndex = itemsInLastRow === 0 ? -1 : displayItems.length - itemsInLastRow;
+  const lastRowLeadOffset = itemsInLastRow === 0 ? 0 : gridInfo.cols - itemsInLastRow; // in sub-columns
+
   return (
     <main style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: colors.bgApp, overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
       <style>{mobileStyles}</style>
@@ -2005,14 +2013,14 @@ export default function Meeting() {
             <div style={{
               width: '100%',
               display: 'grid',
-              gridTemplateColumns: `repeat(${gridInfo.cols}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${gridInfo.cols * 2}, minmax(0, 1fr))`,
               gap: '1.5rem',
               maxWidth: gridInfo.cols === 1 ? '800px' : '1200px',
               margin: '0 auto',
               alignContent: 'center',
               justifyContent: 'center'
             }}>
-              {displayItems.map((p: any) => {
+              {displayItems.map((p: any, idx: number) => {
                 const originalId = p.originalId || p.id;
                 const participantUserId = p.isLocal ? currentUserId : participantUserIdBySocketId[originalId];
                 const queueIndex = speakingQueue.findIndex(q => q.userId === participantUserId);
@@ -2035,7 +2043,12 @@ export default function Meeting() {
                     justifyContent: 'center',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     maxHeight: '100%',
-                    width: '100%'
+                    width: '100%',
+                    // Each tile occupies 2 sub-columns; the first tile of a partial
+                    // last row is shifted right to center the remaining tile(s).
+                    gridColumn: idx === lastRowFirstIndex
+                      ? `${lastRowLeadOffset + 1} / span 2`
+                      : 'span 2',
                   }}>
                     {p.isLocal ? (
                       <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
