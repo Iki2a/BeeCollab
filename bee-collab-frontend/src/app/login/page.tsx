@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const getApiBase = () => {
@@ -13,7 +13,7 @@ const getApiBase = () => {
 // Unwrap ApiResponse envelope { success, data, ... } → data
 const unwrap = <T = any>(json: any): T => json?.data ?? json;
 
-export default function AuthPage() {
+function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
@@ -292,5 +292,15 @@ export default function AuthPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// useSearchParams() must be wrapped in a Suspense boundary for Next.js
+// static generation (App Router requirement).
+export default function AuthPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuthPageInner />
+    </Suspense>
   );
 }
