@@ -28,4 +28,9 @@ export interface SocketData {
   videoEnabled?: boolean;
   /** Meeting room ID — stored on join so disconnect can reference it */
   meetingId?: string;
+  /**
+   * Guest hand-raise timestamp (ISO string) or null.
+   * Guests have no DB Participant row, so their speaking-queue state lives here.
+   */
+  handRaisedAt?: string | null;
 }

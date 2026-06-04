@@ -10,6 +10,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SignalingService } from './signaling.service';
 import { ChatService } from '../chat/chat.service';
@@ -150,6 +151,14 @@ export class SignalingGateway
         userId: data.user.sub,
         user: data.profile,
       });
+    }
+
+    // Refresh the speaking queue so a leaver with a raised hand is removed
+    // (exclude this socket — it may still appear in the room map momentarily).
+    const meetingId = participant?.meetingId ?? data?.meetingId;
+    if (meetingId) {
+      const queue = await this.buildSpeakingQueue(meetingId, client.id);
+      this.server.to(meetingId).emit('queue:updated', queue);
     }
 
     console.log(`[WS] Client disconnected: ${client.id}`);
@@ -360,6 +369,28 @@ export class SignalingGateway
     @MessageBody() payload: ChatPayload,
   ) {
     const user = getUser(client);
+    const data = client.data as SocketData;
+
+    if (user.isGuest) {
+      // Guests have no User row, so ChatMessage.senderId (FK → User.id) can't be
+      // persisted. Broadcast an in-memory message instead (not saved to history).
+      const guestMessage = {
+        id: randomUUID(),
+        meetingId: payload.meetingId,
+        senderId: user.sub,
+        message: payload.message,
+        type: 'TEXT',
+        createdAt: new Date().toISOString(),
+        sender: {
+          id: user.sub,
+          name: data.profile?.name ?? user.name ?? 'Guest',
+          avatarUrl: data.profile?.avatarUrl ?? null,
+        },
+      };
+      this.server.to(payload.meetingId).emit('chat:message', guestMessage);
+      return;
+    }
+
     const saved = await this.chatService.saveMessage(
       payload.meetingId,
       user.sub,
@@ -394,6 +425,49 @@ export class SignalingGateway
 
   // ── Hand raise ──────────────────────────────────────────────────────────────
 
+  // ── Speaking-queue helpers ────────────────────────────────────────────────────
+
+  /** Local (writable) sockets currently in a meeting room — single-node. */
+  private getLocalRoomSockets(meetingId: string, excludeSocketId?: string): Socket[] {
+    const map = (this.server as unknown as { sockets?: Map<string, Socket> }).sockets;
+    if (!map) return [];
+    const result: Socket[] = [];
+    for (const s of map.values()) {
+      if (s.id === excludeSocketId) continue;
+      if (s.rooms?.has(meetingId)) result.push(s);
+    }
+    return result;
+  }
+
+  /**
+   * Build the combined speaking queue: registered users (from DB) + guests
+   * (from socket.data, since they have no Participant row), sorted by raise time.
+   */
+  private async buildSpeakingQueue(meetingId: string, excludeSocketId?: string) {
+    const dbQueue = await this.signalingService.getSpeakingQueue(meetingId);
+    const entries: { userId: string; user: unknown; handRaisedAt: Date }[] =
+      dbQueue.map((p) => ({
+        userId: p.userId,
+        user: p.user,
+        handRaisedAt: p.handRaisedAt as Date,
+      }));
+
+    for (const s of this.getLocalRoomSockets(meetingId, excludeSocketId)) {
+      const d = s.data as SocketData;
+      if (d.user?.isGuest && d.handRaisedAt) {
+        entries.push({
+          userId: d.user.sub,
+          user: d.profile ?? { id: d.user.sub, name: d.user.name ?? 'Guest', avatarUrl: null },
+          handRaisedAt: new Date(d.handRaisedAt),
+        });
+      }
+    }
+
+    return entries
+      .sort((a, b) => a.handRaisedAt.getTime() - b.handRaisedAt.getTime())
+      .map((e) => ({ userId: e.userId, user: e.user, handRaisedAt: e.handRaisedAt }));
+  }
+
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('hand:toggle')
   async onHandToggle(
@@ -401,14 +475,16 @@ export class SignalingGateway
     @MessageBody() payload: HandTogglePayload,
   ) {
     const user = getUser(client);
-    await this.signalingService.toggleHand(payload.meetingId, user.sub, payload.raised);
 
-    const queue = await this.signalingService.getSpeakingQueue(payload.meetingId);
-    this.server.to(payload.meetingId).emit('queue:updated', queue.map(p => ({
-      userId: p.userId,
-      user: p.user,
-      handRaisedAt: p.handRaisedAt,
-    })));
+    if (user.isGuest) {
+      // Guests have no Participant row — keep hand state on the socket
+      client.data.handRaisedAt = payload.raised ? new Date().toISOString() : null;
+    } else {
+      await this.signalingService.toggleHand(payload.meetingId, user.sub, payload.raised);
+    }
+
+    const queue = await this.buildSpeakingQueue(payload.meetingId);
+    this.server.to(payload.meetingId).emit('queue:updated', queue);
   }
 
   @UseGuards(WsJwtGuard)
@@ -421,13 +497,27 @@ export class SignalingGateway
     const canReorder = await this.signalingService.isHostOrCoHost(payload.meetingId, user.sub);
     if (!canReorder) return;
 
-    await this.signalingService.reorderQueue(payload.meetingId, payload.orderedUserIds);
-    const queue = await this.signalingService.getSpeakingQueue(payload.meetingId);
-    this.server.to(payload.meetingId).emit('queue:updated', queue.map(p => ({
-      userId: p.userId,
-      user: p.user,
-      handRaisedAt: p.handRaisedAt,
-    })));
+    // Map guest userId → writable socket so we can reorder guests too
+    const guestByUser = new Map<string, Socket>();
+    for (const s of this.getLocalRoomSockets(payload.meetingId)) {
+      const d = s.data as SocketData;
+      if (d.user?.isGuest) guestByUser.set(d.user.sub, s);
+    }
+
+    const now = Date.now();
+    for (let i = 0; i < payload.orderedUserIds.length; i++) {
+      const uid = payload.orderedUserIds[i];
+      const ts = new Date(now + i * 1000);
+      const guestSocket = guestByUser.get(uid);
+      if (guestSocket) {
+        guestSocket.data.handRaisedAt = ts.toISOString();
+      } else {
+        await this.signalingService.setHandRaisedAt(payload.meetingId, uid, ts);
+      }
+    }
+
+    const queue = await this.buildSpeakingQueue(payload.meetingId);
+    this.server.to(payload.meetingId).emit('queue:updated', queue);
   }
 
   // ── Agenda ───────────────────────────────────────────────────────────────────

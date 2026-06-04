@@ -166,6 +166,21 @@ export class SignalingService {
     });
   }
 
+  /**
+   * Set a specific hand-raise timestamp for a registered participant.
+   * FK-safe: silently ignores users with no Participant row (e.g. guests or
+   * stale ids) instead of throwing P2025.
+   */
+  async setHandRaisedAt(meetingId: string, userId: string, at: Date | null) {
+    try {
+      return await this.participantRepository.updateByMeetingAndUser(meetingId, userId, {
+        handRaisedAt: at,
+      });
+    } catch {
+      return null;
+    }
+  }
+
   async getSpeakingQueue(meetingId: string) {
     const participants = await this.participantRepository.findManyByMeeting(meetingId, true);
     return participants

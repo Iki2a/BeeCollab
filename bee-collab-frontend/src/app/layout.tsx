@@ -13,7 +13,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
+      {/* suppressHydrationWarning: some browser extensions inject attributes
+          (e.g. bis_register, __processed_*) onto <body> before React hydrates,
+          which would otherwise log a harmless hydration mismatch warning. */}
+      <body suppressHydrationWarning>
         {children}
       </body>
     </html>
