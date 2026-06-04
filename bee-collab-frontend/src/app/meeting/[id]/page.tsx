@@ -7,7 +7,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Hand, Users, MessageSquare,
-  Send, X, Subtitles, MonitorUp, MoreVertical, Info, ListChecks, BarChart3, Smile
+  Send, X, Subtitles, MonitorUp, MoreVertical, Info, ListChecks, BarChart3, Smile,
+  Gauge
 } from 'lucide-react';
 
 const getApiBase = () => {
@@ -40,6 +41,9 @@ export default function Meeting() {
   const [isConnected, setIsConnected] = useState(false);
   const [isJoining, setIsJoining] = useState(true);
   const [mediaEnabled, setMediaEnabled] = useState({ audio: false, video: false });
+  // Audio-only / data-saver mode: stop DOWNLOADING remote video to save bandwidth
+  const [audioOnly, setAudioOnly] = useState(false);
+  const audioOnlyRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'people' | 'agenda' | 'polls' | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [isCoHost, setIsCoHost] = useState(false);
@@ -520,6 +524,45 @@ export default function Meeting() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants.length]);
 
+  useEffect(() => {
+    audioOnlyRef.current = audioOnly;
+  }, [audioOnly]);
+
+  // Renegotiate a peer's video transceivers so the remote stops (or resumes)
+  // sending video. This actually stops the DOWNLOAD — not just the rendering.
+  const applyReceiveVideoPreference = (pc: RTCPeerConnection) => {
+    const wantReceive = !audioOnlyRef.current;
+    pc.getTransceivers().forEach((t) => {
+      if (t.currentDirection === 'stopped') return;
+      const isVideo =
+        t.receiver?.track?.kind === 'video' || t.sender?.track?.kind === 'video';
+      if (!isVideo) return;
+
+      const sendingVideo = t.sender?.track?.kind === 'video';
+      const desired: RTCRtpTransceiverDirection = wantReceive
+        ? (sendingVideo ? 'sendrecv' : 'recvonly')
+        : (sendingVideo ? 'sendonly' : 'inactive');
+
+      if (t.direction !== desired) {
+        try {
+          t.direction = desired; // triggers negotiationneeded → renegotiation
+        } catch {
+          /* transceiver may be in a transient state — ignored */
+        }
+      }
+    });
+  };
+
+  // Toggle audio-only mode and re-apply to every existing peer.
+  const toggleAudioOnly = () => {
+    const next = !audioOnlyRef.current;
+    audioOnlyRef.current = next;
+    setAudioOnly(next);
+    Object.values(peerStateRef.current).forEach((state) => {
+      applyReceiveVideoPreference(state.pc);
+    });
+  };
+
   const createPeerConnection = (targetId: string, activeSocket: Socket) => {
     const existing = peerStateRef.current[targetId];
     if (existing) return existing;
@@ -666,6 +709,8 @@ export default function Meeting() {
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         // Re-apply caps once connected (some browsers ignore setParameters pre-connect)
         void applyBandwidthLimits(pc);
+        // Enforce audio-only on freshly-negotiated peers
+        if (audioOnlyRef.current) applyReceiveVideoPreference(pc);
       }
     };
 
@@ -737,6 +782,9 @@ export default function Meeting() {
       } else if (videoTrack && stream) {
         pc.addTrack(videoTrack, stream);
       }
+
+      // addTrack/replaceTrack can reset direction to sendrecv — re-assert audio-only
+      if (audioOnlyRef.current) applyReceiveVideoPreference(pc);
     });
 
     if (!activeSocket) return;
@@ -2092,6 +2140,8 @@ export default function Meeting() {
                 const isSpeaking = speakingParticipants[p.isLocal ? 'local' : originalId];
                 const isVideoEnabled = p.isLocal ? mediaEnabled.video : (p.videoEnabled ?? true);
                 const isAudioEnabled = p.isLocal ? mediaEnabled.audio : (p.audioEnabled ?? true);
+                // In audio-only mode remote video isn't downloaded — show the avatar
+                const showVideo = isVideoEnabled && !(audioOnly && !p.isLocal);
 
                 return (
                   <div key={p.id} className="participant-card" style={{
@@ -2115,11 +2165,11 @@ export default function Meeting() {
                       : 'span 2',
                   }}>
                     {p.isLocal ? (
-                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
+                      <video ref={bindVideo(localStream)} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', position: 'absolute', top: 0, left: 0, opacity: showVideo ? 1 : 0 }} />
                     ) : (
-                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: isVideoEnabled ? 1 : 0 }} />
+                      <video ref={bindVideo(p.stream || null)} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: showVideo ? 1 : 0 }} />
                     )}
-                    {!isVideoEnabled && (
+                    {!showVideo && (
                       <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#31415e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', border: '2px solid rgba(255,255,255,0.1)' }}>
                         {p.name.charAt(0).toUpperCase()}
                       </div>
@@ -2564,6 +2614,15 @@ export default function Meeting() {
           </button>
           <button onClick={() => toggleMedia('video')} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: mediaEnabled.video ? colors.bgDarkNavy : colors.bgDarkNavy, color: mediaEnabled.video ? 'white' : colors.red, transition: 'all 0.2s' }}>
             {mediaEnabled.video ? <Video size={20} /> : <VideoOff size={20} />}
+          </button>
+
+          <button
+            onClick={toggleAudioOnly}
+            className="control-btn"
+            title={audioOnly ? 'Data saver ON — remote video paused. Click to resume.' : 'Data saver — stop downloading remote video to save bandwidth'}
+            style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: audioOnly ? '#0f4c75' : colors.bgDarkNavy, color: audioOnly ? '#ffd54a' : 'white', transition: 'all 0.2s' }}
+          >
+            <Gauge size={20} />
           </button>
 
           <button onClick={toggleHandRaise} className="control-btn" style={{ width: '44px', height: '44px', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isHandRaised ? '#0f4c75' : colors.bgDarkNavy, color: 'white', transition: 'all 0.2s' }}>
