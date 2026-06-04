@@ -476,6 +476,50 @@ export default function Meeting() {
     setRemoteStreams(nextStreams);
   };
 
+  // Target per-stream video bitrate. Shrinks as the mesh grows, because in a
+  // full mesh each person's upload = (peers) × bitrate. Keeping total upload
+  // bounded is what prevents lag as the call fills up.
+  const getTargetVideoKbps = () => {
+    const peers = Object.keys(peerStateRef.current).length; // other participants
+    if (peers <= 1) return 1200; // 1:1 — full quality
+    if (peers <= 3) return 600;  // up to ~4 people
+    return 300;                  // 5+ — keep the call alive
+  };
+
+  // Apply encode caps to a peer connection's senders:
+  //  - video: hard max bitrate + framerate
+  //  - audio: Opus DTX (stop sending during silence) + modest cap
+  const applyBandwidthLimits = async (pc: RTCPeerConnection) => {
+    for (const sender of pc.getSenders()) {
+      if (!sender.track) continue;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      if (sender.track.kind === 'video') {
+        params.encodings[0].maxBitrate = getTargetVideoKbps() * 1000;
+        params.encodings[0].maxFramerate = 24;
+      } else if (sender.track.kind === 'audio') {
+        params.encodings[0].maxBitrate = 32 * 1000; // 32 kbps is plenty for speech
+        (params.encodings[0] as RTCRtpEncodingParameters & { dtx?: string }).dtx = 'enabled';
+      }
+      try {
+        await sender.setParameters(params);
+      } catch {
+        /* some browsers reject mid-negotiation — re-applied on connect */
+      }
+    }
+  };
+
+  // When the participant count changes, re-apply caps to every peer so the
+  // per-stream bitrate scales down as the call fills (and back up as it empties).
+  useEffect(() => {
+    Object.values(peerStateRef.current).forEach((state) => {
+      void applyBandwidthLimits(state.pc);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participants.length]);
+
   const createPeerConnection = (targetId: string, activeSocket: Socket) => {
     const existing = peerStateRef.current[targetId];
     if (existing) return existing;
@@ -619,6 +663,10 @@ export default function Meeting() {
       if (pc.iceConnectionState === 'failed') {
         pc.restartIce();
       }
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        // Re-apply caps once connected (some browsers ignore setParameters pre-connect)
+        void applyBandwidthLimits(pc);
+      }
     };
 
     // Add tracks AFTER attaching all event listeners so negotiationneeded fires reliably!
@@ -630,6 +678,9 @@ export default function Meeting() {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
     }
+
+    // Cap bitrate/framerate on the freshly-added senders
+    void applyBandwidthLimits(pc);
 
     return state;
   };
@@ -1175,13 +1226,26 @@ export default function Meeting() {
   }, [meetingId, router]);
 
   const getAudioConstraint = () => {
-    if (!selectedAudioDeviceId) return true;
-    return { deviceId: { exact: selectedAudioDeviceId } };
+    // Echo cancellation + noise suppression also reduce bitrate on Opus
+    const base: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+    if (selectedAudioDeviceId) base.deviceId = { exact: selectedAudioDeviceId };
+    return base;
   };
 
   const getVideoConstraint = () => {
-    if (!selectedVideoDeviceId) return true;
-    return { deviceId: { exact: selectedVideoDeviceId } };
+    // Cap capture at 640×360 / 24fps — far less bandwidth than the 720p default,
+    // which is the single biggest win for a P2P mesh.
+    const base: MediaTrackConstraints = {
+      width: { ideal: 640, max: 1280 },
+      height: { ideal: 360, max: 720 },
+      frameRate: { ideal: 24, max: 30 },
+    };
+    if (selectedVideoDeviceId) base.deviceId = { exact: selectedVideoDeviceId };
+    return base;
   };
 
   const applyDeviceSelection = async () => {
