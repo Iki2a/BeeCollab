@@ -3,20 +3,12 @@ import { MeetingsService } from './meetings.service';
 import { MeetingsController } from './meetings.controller';
 import { MeetingsCleanupService } from './meetings.cleanup.service';
 import { SignalingModule } from '../signaling/signaling.module';
-import { AgendaService } from './agenda.service';
-import { PollService } from './poll.service';
-import { ReactionService } from './reaction.service';
+import { MeetingFeaturesModule } from './meeting-features.module';
 
 @Module({
-  imports: [SignalingModule],
+  imports: [SignalingModule, MeetingFeaturesModule],
   controllers: [MeetingsController],
-  providers: [
-    MeetingsService,
-    MeetingsCleanupService,
-    AgendaService,
-    PollService,
-    ReactionService,
-  ],
-  exports: [MeetingsService, AgendaService, PollService, ReactionService],
+  providers: [MeetingsService, MeetingsCleanupService],
+  exports: [MeetingsService, MeetingFeaturesModule],
 })
 export class MeetingsModule {}

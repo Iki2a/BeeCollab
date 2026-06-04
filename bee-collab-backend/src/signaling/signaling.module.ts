@@ -3,9 +3,10 @@ import { SignalingGateway } from './signaling.gateway';
 import { SignalingService } from './signaling.service';
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
+import { MeetingFeaturesModule } from '../meetings/meeting-features.module';
 
 @Module({
-  imports: [AuthModule, ChatModule],
+  imports: [AuthModule, ChatModule, MeetingFeaturesModule],
   providers: [SignalingGateway, SignalingService],
   exports: [SignalingGateway],
 })

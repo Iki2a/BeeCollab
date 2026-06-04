@@ -2357,12 +2357,14 @@ export default function Meeting() {
                   })
                   .filter((p) => {
                     if (!peopleSearch.trim()) return true;
-                    const resolvedName = meetingInfo?.participantUsers?.[p.userId]?.name;
+                    // Guests aren't in participantUsers (DB) — fall back to socket profile name
+                    const resolvedName = meetingInfo?.participantUsers?.[p.userId]?.name || p.user?.name;
                     const name = resolvedName || `User ${p.userId?.substring(0, 5)}`;
                     return name.toLowerCase().includes(peopleSearch.trim().toLowerCase());
                   })
                   .map((p, i) => {
-                    const resolvedName = meetingInfo?.participantUsers?.[p.userId]?.name;
+                    // Guests aren't in participantUsers (DB) — fall back to socket profile name
+                    const resolvedName = meetingInfo?.participantUsers?.[p.userId]?.name || p.user?.name;
                     const name = resolvedName || `User ${p.userId?.substring(0, 5)}`;
                     const isMe = currentUserId && p.userId === currentUserId;
                     const isHostLabel = meetingInfo?.hostId && p.userId === meetingInfo.hostId;
