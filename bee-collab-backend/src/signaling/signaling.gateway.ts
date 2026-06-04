@@ -174,6 +174,27 @@ export class SignalingGateway
       }
     }
 
+    // ── Capacity check ─────────────────────────────────────────────────────────
+    // Enforce maxParticipants here (the WS join is the real entry point — guests
+    // and the REST flow both ultimately arrive here). Count DISTINCT users already
+    // in the room, excluding this user so reconnects/rejoins never falsely fill a slot.
+    const maxParticipants = await this.signalingService.getMaxParticipants(payload.meetingId);
+    if (maxParticipants && maxParticipants > 0) {
+      const roomSockets = await this.server.in(payload.meetingId).fetchSockets();
+      const distinctOtherUsers = new Set<string>();
+      for (const s of roomSockets) {
+        const sub = (s.data as SocketData).user?.sub;
+        if (sub && sub !== user.sub) distinctOtherUsers.add(sub);
+      }
+      if (distinctOtherUsers.size >= maxParticipants) {
+        client.emit('meeting:full', {
+          message: `This meeting is full (max ${maxParticipants} participants).`,
+        });
+        client.disconnect();
+        return;
+      }
+    }
+
     // Always store meetingId so handleDisconnect can reference it for guests
     client.data.meetingId = payload.meetingId;
 

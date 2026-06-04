@@ -45,7 +45,7 @@ export default function Meeting() {
   const [isCoHost, setIsCoHost] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
   const [meetingEndedReason, setMeetingEndedReason] = useState('');
-  const [meetingEndType, setMeetingEndType] = useState<'ended' | 'kicked' | 'expired'>('ended');
+  const [meetingEndType, setMeetingEndType] = useState<'ended' | 'kicked' | 'expired' | 'full'>('ended');
   const [countdown, setCountdown] = useState(30);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream[]>>({});
   const [meetingInfo, setMeetingInfo] = useState<{
@@ -150,18 +150,21 @@ export default function Meeting() {
     if (!meetingEnded || meetingEndType === 'kicked') return;
 
     const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.push('/');
-          return 0;
-        }
-        return prev - 1;
-      });
+      // Only compute the next value here — never navigate inside a state updater
+      // (that runs during render and triggers a Router update during render).
+      setCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [meetingEnded, router]);
+  }, [meetingEnded, meetingEndType]);
+
+  // Navigate home once the countdown reaches zero — kept separate from the
+  // countdown updater so router.push is never called during render.
+  useEffect(() => {
+    if (meetingEnded && meetingEndType !== 'kicked' && countdown <= 0) {
+      router.push('/');
+    }
+  }, [meetingEnded, meetingEndType, countdown, router]);
   useEffect(() => {
     if (activeTab === 'chat' && chatContainerRef.current) {
       const container = chatContainerRef.current;
@@ -1002,6 +1005,12 @@ export default function Meeting() {
       setMeetingEnded(true);
     });
 
+    newSocket.on('meeting:full', (payload) => {
+      setMeetingEndedReason(payload?.message || 'This meeting is full.');
+      setMeetingEndType('full');
+      setMeetingEnded(true);
+    });
+
     newSocket.on('media:force-mute', () => {
       if (mediaEnabledRef.current.audio) {
         toggleMediaRef.current('audio');
@@ -1642,7 +1651,8 @@ export default function Meeting() {
             }}>
               {meetingEndType === 'kicked' ? "You have been removed from the meeting" :
                 meetingEndType === 'expired' ? "The meeting time has ended" :
-                  "Host has ended the meeting for everyone"}
+                  meetingEndType === 'full' ? "This meeting is full" :
+                    "Host has ended the meeting for everyone"}
             </h1>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>

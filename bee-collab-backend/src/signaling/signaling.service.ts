@@ -121,6 +121,12 @@ export class SignalingService {
     );
   }
 
+  /** Returns the meeting's max participant capacity (0/undefined = unlimited). */
+  async getMaxParticipants(meetingId: string): Promise<number> {
+    const meeting = await this.meetingRepository.findById(meetingId);
+    return meeting?.maxParticipants ?? 0;
+  }
+
   async isHost(meetingId: string, userId: string) {
     const meeting = await this.meetingRepository.findById(meetingId);
     return Boolean(meeting && meeting.hostId === userId);

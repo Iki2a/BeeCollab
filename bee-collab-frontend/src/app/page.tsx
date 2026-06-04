@@ -456,7 +456,9 @@ export default function Home() {
               alt="People connecting on a video call"
               width={360}
               height={240}
+              priority
               className={styles.illustration}
+              style={{ height: 'auto' }}
             />
             <h2 className={styles.carouselTitle}>Get a link you can share</h2>
             <p className={styles.carouselText}>
